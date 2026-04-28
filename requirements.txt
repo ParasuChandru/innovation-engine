@@ -1,0 +1,28 @@
+# Innovation Engine - Python Requirements
+# Flask web framework and extensions
+Flask==3.0.3
+Flask-Cors==4.0.1
+Werkzeug==3.0.3
+
+# Template engine (Jinja2 comes with Flask)
+Jinja2==3.1.4
+
+# Forms and validation
+WTForms==3.1.2
+email-validator==2.2.0
+
+# File uploads
+python-multipart==0.0.9
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Development server
+gunicorn==22.0.0
+
+# Testing
+pytest==8.2.2
+pytest-cov==5.0.0
+
+# Utilities
+python-dateutil==2.9.0
