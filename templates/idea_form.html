@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Submit New Idea - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-blue-100 rounded-lg">
+                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-semibold">Submit New Innovation Idea</h1>
+                    <p class="text-gray-500 text-sm">Share your idea to improve our processes and operations</p>
+                </div>
+            </div>
+        </div>
+
+        <form method="POST" class="p-6 space-y-6">
+            <div class="space-y-4">
+                <h3 class="font-semibold text-lg border-b pb-2">Basic Information</h3>
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-1">Idea Title *</label>
+                    <input type="text" id="title" name="title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Give your idea a clear, descriptive title">
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                        <select id="category" name="category" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select a category</option>
+                            {% for cat in categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="sub_category" class="block text-sm font-medium text-gray-700 mb-1">Sub-Category</label>
+                        <input type="text" id="sub_category" name="sub_category" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., Reporting, Analytics">
+                    </div>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <h3 class="font-semibold text-lg border-b pb-2">Problem & Solution</h3>
+                <div>
+                    <label for="problem_statement" class="block text-sm font-medium text-gray-700 mb-1">Problem Statement *</label>
+                    <textarea id="problem_statement" name="problem_statement" required rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Describe the current problem..."></textarea>
+                </div>
+                <div>
+                    <label for="proposed_solution" class="block text-sm font-medium text-gray-700 mb-1">Proposed Solution *</label>
+                    <textarea id="proposed_solution" name="proposed_solution" required rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Describe your proposed solution..."></textarea>
+                </div>
+                <div>
+                    <label for="support_needed" class="block text-sm font-medium text-gray-700 mb-1">Support Needed</label>
+                    <textarea id="support_needed" name="support_needed" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="What resources or support would you need?"></textarea>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <h3 class="font-semibold text-lg border-b pb-2">Impact Assessment</h3>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="users_impacted" class="block text-sm font-medium text-gray-700 mb-1">Users Impacted</label>
+                        <input type="text" id="users_impacted" name="users_impacted" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., 50 analysts">
+                    </div>
+                    <div>
+                        <label for="complexity" class="block text-sm font-medium text-gray-700 mb-1">Complexity</label>
+                        <select id="complexity" name="complexity" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            <option value="">Select complexity</option>
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="business_impact" class="block text-sm font-medium text-gray-700 mb-1">Business Impact</label>
+                    <textarea id="business_impact" name="business_impact" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Describe the expected business impact..."></textarea>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <h3 class="font-semibold text-lg border-b pb-2">Technical & Financial Details</h3>
+                <div>
+                    <label for="tools_used" class="block text-sm font-medium text-gray-700 mb-1">Tools/Technologies</label>
+                    <input type="text" id="tools_used" name="tools_used" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., Python, Power BI, AWS">
+                </div>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="est_cost_time" class="block text-sm font-medium text-gray-700 mb-1">Estimated Cost & Time</label>
+                        <input type="text" id="est_cost_time" name="est_cost_time" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., 3 months, $15,000">
+                    </div>
+                    <div>
+                        <label for="proj_savings" class="block text-sm font-medium text-gray-700 mb-1">Projected Annual Savings ($)</label>
+                        <input type="number" id="proj_savings" name="proj_savings" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., 50000">
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                Submit Idea
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

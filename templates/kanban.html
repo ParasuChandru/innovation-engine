@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Kanban Board - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-3xl font-bold">Kanban Board</h1>
+        <p class="text-gray-500 mt-1">Visual overview of all ideas across workflow stages</p>
+    </div>
+
+    <div class="flex gap-4 overflow-x-auto pb-4 min-h-[600px]">
+        {% for status in statuses %}
+        {% set status_ideas = ideas_by_status[status] %}
+        <div class="flex-shrink-0 w-[300px] rounded-lg border-2
+            {% if status == 'Open' %}bg-slate-50 border-slate-300
+            {% elif status == 'ScoreIT' %}bg-purple-50 border-purple-300
+            {% elif status == 'Business Case Template' %}bg-indigo-50 border-indigo-300
+            {% elif status == 'Waiting for CGI approval' %}bg-amber-50 border-amber-300
+            {% elif status == 'Waiting for LT approval' %}bg-orange-50 border-orange-300
+            {% elif status == 'Ready for implementation' %}bg-cyan-50 border-cyan-300
+            {% elif status == 'Implementation in progress' %}bg-blue-50 border-blue-300
+            {% else %}bg-green-50 border-green-300{% endif %}">
+            
+            <div class="p-3 rounded-t-md text-white flex items-center justify-between
+                {% if status == 'Open' %}bg-slate-500
+                {% elif status == 'ScoreIT' %}bg-purple-500
+                {% elif status == 'Business Case Template' %}bg-indigo-500
+                {% elif status == 'Waiting for CGI approval' %}bg-amber-500
+                {% elif status == 'Waiting for LT approval' %}bg-orange-500
+                {% elif status == 'Ready for implementation' %}bg-cyan-500
+                {% elif status == 'Implementation in progress' %}bg-blue-500
+                {% else %}bg-green-500{% endif %}">
+                <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span class="font-semibold text-sm truncate max-w-[180px]">{{ status }}</span>
+                </div>
+                <span class="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">{{ status_ideas|length }}</span>
+            </div>
+
+            <div class="p-2 space-y-2 max-h-[calc(100vh-300px)] overflow-y-auto">
+                {% if status_ideas %}
+                {% for idea in status_ideas %}
+                <a href="{{ url_for('idea_detail', idea_id=idea.id) }}">
+                    <div class="bg-white rounded-lg shadow p-3 hover:shadow-md transition-shadow cursor-pointer">
+                        <h3 class="text-sm font-semibold line-clamp-2 mb-2">{{ idea.title }}</h3>
+                        <div class="flex flex-wrap gap-1 mb-2">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border">{{ idea.category }}</span>
+                            {% if idea.complexity %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {% if idea.complexity == 'Low' %}bg-green-100 text-green-800
+                                {% elif idea.complexity == 'Medium' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ idea.complexity }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <p class="text-xs text-gray-500 line-clamp-2 mb-2">{{ idea.problem_statement }}</p>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-gray-500 truncate max-w-[120px]">{{ idea.submitter_name }}</span>
+                            {% if idea.proj_savings %}
+                            <span class="font-semibold text-green-600">{{ idea.proj_savings|currency }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-8 text-gray-400 text-sm">No ideas in this stage</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
