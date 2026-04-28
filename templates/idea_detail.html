@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ idea.title }} - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <a href="{{ url_for('dashboard') }}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        Back to Dashboard
+    </a>
+
+    <div class="flex flex-col md:flex-row justify-between items-start gap-4">
+        <div>
+            <h1 class="text-3xl font-bold">{{ idea.title }}</h1>
+            <div class="flex items-center gap-3 mt-2">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-sm font-medium border">{{ idea.category }}</span>
+                {% if idea.complexity %}
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-sm font-medium
+                    {% if idea.complexity == 'Low' %}bg-green-100 text-green-800
+                    {% elif idea.complexity == 'Medium' %}bg-yellow-100 text-yellow-800
+                    {% else %}bg-red-100 text-red-800{% endif %}">{{ idea.complexity }} Complexity</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if idea.proj_savings %}
+        <div class="text-right">
+            <div class="text-3xl font-bold text-green-600">{{ idea.proj_savings|currency }}</div>
+            <div class="text-sm text-gray-500">Projected Savings</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Progress Stepper -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="mb-4">
+            <h2 class="text-lg font-semibold">Workflow Progress</h2>
+            <p class="text-sm text-gray-500">Current stage: <span class="font-semibold text-blue-600">{{ idea.status }}</span></p>
+        </div>
+        <div class="hidden md:flex items-center justify-between">
+            {% for status in statuses %}
+            {% set idx = loop.index0 %}
+            <div class="flex items-center {% if not loop.last %}flex-1{% endif %}">
+                <div class="flex flex-col items-center">
+                    <div class="w-10 h-10 rounded-full border-2 flex items-center justify-center
+                        {% if idx < current_index %}bg-green-500 text-white border-green-500
+                        {% elif idx == current_index %}bg-blue-500 text-white border-blue-500 ring-4 ring-blue-100
+                        {% else %}bg-gray-100 text-gray-400 border-gray-300{% endif %}">
+                        {% if idx < current_index %}
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        {% else %}<span class="text-xs font-medium">{{ idx + 1 }}</span>{% endif %}
+                    </div>
+                    <span class="mt-2 text-xs font-medium text-center max-w-[80px]
+                        {% if idx == current_index %}text-blue-600{% elif idx < current_index %}text-green-600{% else %}text-gray-400{% endif %}">{{ status }}</span>
+                </div>
+                {% if not loop.last %}
+                <div class="flex-1 h-1 mx-2 rounded {% if idx < current_index %}bg-green-500{% else %}bg-gray-200{% endif %}"></div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Status Actions -->
+    {% if idea.status == 'Waiting for CGI approval' and (user.role == 'CGI_EXEC' or user.role == 'ADMIN') %}
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-6">
+        <h3 class="font-semibold text-lg mb-2">CGI Executive Approval Required</h3>
+        <div class="flex gap-4">
+            <form method="POST" action="{{ url_for('update_status', idea_id=idea.id) }}" class="flex-1">
+                <input type="hidden" name="status" value="Waiting for LT approval">
+                <button type="submit" class="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-green-700 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    APPROVE FOR LT
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('update_status', idea_id=idea.id) }}" class="flex-1">
+                <input type="hidden" name="status" value="Open">
+                <button type="submit" class="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700 flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    REJECT
+                </button>
+            </form>
+        </div>
+    </div>
+    {% elif idea.status == 'Waiting for LT approval' and (user.role == 'LT_EXEC' or user.role == 'ADMIN') %}
+    <div class="bg-orange-50 border border-orange-200 rounded-lg p-6">
+        <h3 class="font-semibold text-lg mb-2">Leadership Team Approval Required</h3>
+        <div class="flex gap-4">
+            <form method="POST" action="{{ url_for('update_status', idea_id=idea.id) }}" class="flex-1">
+                <input type="hidden" name="status" value="Ready for implementation">
+                <button type="submit" class="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-green-700">APPROVE FOR IMPLEMENTATION</button>
+            </form>
+            <form method="POST" action="{{ url_for('update_status', idea_id=idea.id) }}" class="flex-1">
+                <input type="hidden" name="status" value="Waiting for CGI approval">
+                <button type="submit" class="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700">SEND BACK</button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Main Content Grid -->
+    <div class="grid lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="font-semibold mb-3">Problem Statement</h3>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ idea.problem_statement }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="font-semibold mb-3">Proposed Solution</h3>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ idea.proposed_solution }}</p>
+            </div>
+            {% if idea.support_needed %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="font-semibold mb-3">Support Needed</h3>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ idea.support_needed }}</p>
+            </div>
+            {% endif %}
+            {% if idea.business_impact %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="font-semibold mb-3">Business Impact</h3>
+                <p class="text-gray-700 whitespace-pre-wrap">{{ idea.business_impact }}</p>
+            </div>
+            {% endif %}
+        </div>
+        <div class="space-y-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-base font-semibold mb-4">Submitted By</h3>
+                <div class="font-medium">{{ idea.submitter_name }}</div>
+                <div class="text-sm text-gray-500">{{ idea.submitter_email }}</div>
+            </div>
+            {% if idea.spoc_name %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-base font-semibold mb-4">Assigned SPOC</h3>
+                <div class="font-medium">{{ idea.spoc_name }}</div>
+                <div class="text-sm text-gray-500">{{ idea.spoc_email }}</div>
+            </div>
+            {% endif %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-base font-semibold mb-4">Details</h3>
+                <div class="space-y-3 text-sm">
+                    <div><span class="text-gray-500">Created:</span> <span class="font-medium">{{ idea.created_at|date }}</span></div>
+                    {% if idea.users_impacted %}<div><span class="text-gray-500">Users Impacted:</span> <span class="font-medium">{{ idea.users_impacted }}</span></div>{% endif %}
+                    {% if idea.tools_used %}<div><span class="text-gray-500">Tools:</span> <span class="font-medium">{{ idea.tools_used }}</span></div>{% endif %}
+                    {% if idea.est_cost_time %}<div><span class="text-gray-500">Est. Cost & Time:</span> <span class="font-medium">{{ idea.est_cost_time }}</span></div>{% endif %}
+                    {% if idea.proj_savings %}<div><span class="text-gray-500">Projected Savings:</span> <span class="font-medium text-green-600">{{ idea.proj_savings|currency }}</span></div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
