@@ -74,12 +74,29 @@ def setup_database():
             FOREIGN KEY (spoc_id) REFERENCES users(id) ON DELETE SET NULL
         );
 
+        -- Documents table (NEW - for document uploads)
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            idea_id INTEGER NOT NULL,
+            uploaded_by INTEGER NOT NULL,
+            original_filename TEXT NOT NULL,
+            stored_filename TEXT NOT NULL UNIQUE,
+            file_size INTEGER NOT NULL,
+            file_type TEXT NOT NULL,
+            description TEXT,
+            uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+            FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+        );
+
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
         CREATE INDEX IF NOT EXISTS idx_ideas_submitter ON ideas(submitter_id);
         CREATE INDEX IF NOT EXISTS idx_ideas_spoc ON ideas(spoc_id);
         CREATE INDEX IF NOT EXISTS idx_ideas_category ON ideas(category);
         CREATE INDEX IF NOT EXISTS idx_spoc_mapping_category ON spoc_mapping(category);
+        CREATE INDEX IF NOT EXISTS idx_documents_idea ON documents(idea_id);
+        CREATE INDEX IF NOT EXISTS idx_documents_uploader ON documents(uploaded_by);
     ''')
     
     conn.commit()
@@ -95,6 +112,7 @@ def seed_database():
     cursor = conn.cursor()
     
     # Clear existing data
+    cursor.execute('DELETE FROM documents')
     cursor.execute('DELETE FROM ideas')
     cursor.execute('DELETE FROM spoc_mapping')
     cursor.execute('DELETE FROM users')
