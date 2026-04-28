@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+"""
+Innovation Engine - Database Setup Script
+Creates tables and seeds sample data
+"""
+
+import sqlite3
+import os
+
+# Database path
+DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'innovation.db')
+
+def setup_database():
+    """Create database schema"""
+    
+    # Ensure data directory exists
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Enable foreign keys
+    cursor.execute('PRAGMA foreign_keys = ON')
+    
+    # Create tables
+    cursor.executescript('''
+        -- Users table
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('OWNER', 'SPOC', 'CGI_EXEC', 'LT_EXEC', 'ADMIN')),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- SPOC Mapping table
+        CREATE TABLE IF NOT EXISTS spoc_mapping (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL UNIQUE,
+            spoc_id INTEGER NOT NULL,
+            FOREIGN KEY (spoc_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        -- Ideas table
+        CREATE TABLE IF NOT EXISTS ideas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            submitter_id INTEGER NOT NULL,
+            spoc_id INTEGER,
+            status TEXT NOT NULL DEFAULT 'Open' CHECK(status IN (
+                'Open', 
+                'ScoreIT', 
+                'Business Case Template', 
+                'Waiting for CGI approval', 
+                'Waiting for LT approval', 
+                'Ready for implementation', 
+                'Implementation in progress', 
+                'Deploy and Done'
+            )),
+            category TEXT NOT NULL,
+            sub_category TEXT,
+            problem_statement TEXT NOT NULL,
+            proposed_solution TEXT NOT NULL,
+            support_needed TEXT,
+            users_impacted TEXT,
+            business_impact TEXT,
+            complexity TEXT CHECK(complexity IN ('Low', 'Medium', 'High')),
+            tools_used TEXT,
+            est_cost_time TEXT,
+            proj_savings REAL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (submitter_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (spoc_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
+        -- Create indexes
+        CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
+        CREATE INDEX IF NOT EXISTS idx_ideas_submitter ON ideas(submitter_id);
+        CREATE INDEX IF NOT EXISTS idx_ideas_spoc ON ideas(spoc_id);
+        CREATE INDEX IF NOT EXISTS idx_ideas_category ON ideas(category);
+        CREATE INDEX IF NOT EXISTS idx_spoc_mapping_category ON spoc_mapping(category);
+    ''')
+    
+    conn.commit()
+    conn.close()
+    
+    print('✅ Database schema created successfully!')
+    print(f'   Database location: {DB_PATH}')
+
+def seed_database():
+    """Seed database with sample data"""
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Clear existing data
+    cursor.execute('DELETE FROM ideas')
+    cursor.execute('DELETE FROM spoc_mapping')
+    cursor.execute('DELETE FROM users')
+    
+    # Insert users
+    users = [
+        ('Admin User', 'admin@company.com', 'ADMIN'),
+        ('Sarah Johnson', 'sarah.johnson@company.com', 'SPOC'),
+        ('Mike Chen', 'mike.chen@company.com', 'SPOC'),
+        ('Emily Davis', 'emily.davis@company.com', 'SPOC'),
+        ('James Wilson', 'james.wilson@company.com', 'SPOC'),
+        ('Robert Brown', 'robert.brown@company.com', 'CGI_EXEC'),
+        ('Lisa Martinez', 'lisa.martinez@company.com', 'CGI_EXEC'),
+        ('David Lee', 'david.lee@company.com', 'LT_EXEC'),
+        ('Jennifer Taylor', 'jennifer.taylor@company.com', 'LT_EXEC'),
+        ('John Smith', 'john.smith@company.com', 'OWNER'),
+        ('Anna Garcia', 'anna.garcia@company.com', 'OWNER'),
+        ('Tom Harris', 'tom.harris@company.com', 'OWNER'),
+        ('Nancy White', 'nancy.white@company.com', 'OWNER'),
+    ]
+    
+    cursor.executemany(
+        'INSERT INTO users (name, email, role) VALUES (?, ?, ?)',
+        users
+    )
+    
+    # Get user IDs
+    user_ids = {}
+    for row in cursor.execute('SELECT id, email FROM users'):
+        user_ids[row[1]] = row[0]
+    
+    print(f'✅ Inserted {len(users)} users')
+    
+    # Insert SPOC mappings
+    spoc_mappings = [
+        ('Production Services', user_ids['sarah.johnson@company.com']),
+        ('SAMS Ops', user_ids['mike.chen@company.com']),
+        ('IT Infrastructure', user_ids['emily.davis@company.com']),
+        ('Customer Experience', user_ids['james.wilson@company.com']),
+        ('Finance & Accounting', user_ids['sarah.johnson@company.com']),
+        ('Human Resources', user_ids['mike.chen@company.com']),
+        ('Supply Chain', user_ids['emily.davis@company.com']),
+        ('Marketing', user_ids['james.wilson@company.com']),
+    ]
+    
+    cursor.executemany(
+        'INSERT INTO spoc_mapping (category, spoc_id) VALUES (?, ?)',
+        spoc_mappings
+    )
+    
+    print(f'✅ Inserted {len(spoc_mappings)} SPOC mappings')
+    
+    # Insert sample ideas
+    ideas = [
+        ('Automated Report Generation', user_ids['john.smith@company.com'], 
+         user_ids['sarah.johnson@company.com'], 'Open', 'Production Services', 'Reporting',
+         'Manual report generation takes 4 hours daily',
+         'Implement automated reporting using Python scripts and scheduled tasks',
+         'IT team support for server access', '25 analysts',
+         'High - reduces manual effort significantly', 'Medium',
+         'Python, Power BI', '2 months, $5000', 50000),
+        
+        ('Customer Feedback AI Analysis', user_ids['anna.garcia@company.com'],
+         user_ids['james.wilson@company.com'], 'Waiting for CGI approval', 'Customer Experience', 'Analytics',
+         'Cannot analyze large volumes of customer feedback efficiently',
+         'Deploy NLP-based sentiment analysis tool',
+         'Data Science team, Cloud infrastructure', 'Customer Service team (40 people)',
+         'High - improves customer satisfaction metrics', 'High',
+         'Python, TensorFlow, AWS', '4 months, $25000', 120000),
+        
+        ('Invoice Processing Automation', user_ids['tom.harris@company.com'],
+         user_ids['sarah.johnson@company.com'], 'Waiting for CGI approval', 'Finance & Accounting', 'AP Automation',
+         'Manual invoice processing leads to errors and delays',
+         'OCR-based invoice scanning and auto-matching system',
+         'Finance team validation, IT integration support', 'Finance department (15 people)',
+         'Medium - reduces processing time by 60%', 'Medium',
+         'UiPath, SAP integration', '3 months, $15000', 75000),
+        
+        ('Employee Onboarding Portal', user_ids['nancy.white@company.com'],
+         user_ids['mike.chen@company.com'], 'Waiting for LT approval', 'Human Resources', 'Employee Experience',
+         'Onboarding process is fragmented across multiple systems',
+         'Unified self-service onboarding portal with document management',
+         'HR team, IT security review', '500+ new hires annually',
+         'Medium - improves new hire experience', 'Medium',
+         'React, Node.js, SharePoint', '4 months, $30000', 45000),
+        
+        ('Inventory Tracking IoT System', user_ids['john.smith@company.com'],
+         user_ids['emily.davis@company.com'], 'Ready for implementation', 'Supply Chain', 'Inventory Management',
+         'Cannot track real-time inventory levels accurately',
+         'IoT sensors with real-time dashboard',
+         'Operations team, IoT vendor', 'Warehouse team (30 people)',
+         'High - prevents stockouts and overstock', 'High',
+         'IoT sensors, Azure IoT Hub, Power BI', '6 months, $50000', 200000),
+        
+        ('Marketing Campaign Analytics', user_ids['anna.garcia@company.com'],
+         user_ids['james.wilson@company.com'], 'Implementation in progress', 'Marketing', 'Analytics',
+         'Difficult to measure ROI across marketing channels',
+         'Unified analytics dashboard with attribution modeling',
+         'Marketing team, Data team', 'Marketing team (20 people)',
+         'High - optimizes marketing spend', 'Medium',
+         'Google Analytics, Tableau, Python', '3 months, $20000', 80000),
+        
+        ('Server Monitoring Automation', user_ids['tom.harris@company.com'],
+         user_ids['emily.davis@company.com'], 'Deploy and Done', 'IT Infrastructure', 'DevOps',
+         'Manual server health checks miss critical issues',
+         'Automated monitoring with alerting system',
+         'IT Ops team', 'IT team (10 people)',
+         'High - prevents downtime', 'Low',
+         'Prometheus, Grafana, PagerDuty', '1 month, $5000', 30000),
+        
+        ('Contract Management System', user_ids['nancy.white@company.com'],
+         user_ids['sarah.johnson@company.com'], 'ScoreIT', 'Production Services', 'Legal',
+         'Contract renewals often missed, leading to unfavorable terms',
+         'Digital contract repository with renewal alerts',
+         'Legal team, IT team', 'Legal and Procurement (25 people)',
+         'Medium - ensures timely renewals', 'Medium',
+         'DocuSign, SharePoint', '2 months, $10000', 35000),
+    ]
+    
+    cursor.executemany('''
+        INSERT INTO ideas (
+            title, submitter_id, spoc_id, status, category, sub_category,
+            problem_statement, proposed_solution, support_needed,
+            users_impacted, business_impact, complexity, tools_used,
+            est_cost_time, proj_savings
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', ideas)
+    
+    print(f'✅ Inserted {len(ideas)} sample ideas')
+    
+    conn.commit()
+    conn.close()
+    
+    print('')
+    print('🎉 Database seeded successfully!')
+    print('')
+    print('Sample login emails:')
+    print('  - Admin: admin@company.com')
+    print('  - CGI Exec: robert.brown@company.com')
+    print('  - LT Exec: david.lee@company.com')
+    print('  - SPOC: sarah.johnson@company.com')
+    print('  - Owner: john.smith@company.com')
+
+if __name__ == '__main__':
+    setup_database()
+    seed_database()
