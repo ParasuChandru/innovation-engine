@@ -3,12 +3,14 @@ Innovation Engine - Flask Application
 Enterprise Idea Submission Workflow Management
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_from_directory
 from flask_cors import CORS
 from functools import wraps
+from werkzeug.utils import secure_filename
 import sqlite3
 import os
 from datetime import datetime
+import uuid
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'innovation-engine-secret-key-change-in-production')
@@ -16,6 +18,14 @@ CORS(app)
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'innovation.db')
+
+# Upload configuration
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'uploads')
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'png', 'jpg', 'jpeg', 'gif'}
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
 # Workflow statuses
 IDEA_STATUSES = [
@@ -43,6 +53,42 @@ CATEGORIES = [
     'Supply Chain',
     'Marketing'
 ]
+
+# ============================================
+# Helper Functions
+# ============================================
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def get_file_type(filename):
+    """Get file type category based on extension"""
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    if ext in {'pdf'}:
+        return 'pdf'
+    elif ext in {'doc', 'docx'}:
+        return 'word'
+    elif ext in {'xls', 'xlsx'}:
+        return 'excel'
+    elif ext in {'ppt', 'pptx'}:
+        return 'powerpoint'
+    elif ext in {'png', 'jpg', 'jpeg', 'gif'}:
+        return 'image'
+    elif ext in {'txt'}:
+        return 'text'
+    else:
+        return 'other'
+
+def format_file_size(size_bytes):
+    """Format file size in human readable format"""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 # ============================================
 # Database Functions
@@ -268,6 +314,79 @@ def import_spoc_mappings(mappings):
     return success, failed
 
 # ============================================
+# Document Management Functions
+# ============================================
+
+def get_documents_by_idea(idea_id):
+    """Get all documents for an idea"""
+    conn = get_db()
+    documents = conn.execute('''
+        SELECT 
+            d.*,
+            u.name as uploader_name,
+            u.email as uploader_email
+        FROM documents d
+        JOIN users u ON d.uploaded_by = u.id
+        WHERE d.idea_id = ?
+        ORDER BY d.uploaded_at DESC
+    ''', (idea_id,)).fetchall()
+    conn.close()
+    return [dict(doc) for doc in documents]
+
+def get_document_by_id(doc_id):
+    """Get a single document by ID"""
+    conn = get_db()
+    document = conn.execute('''
+        SELECT 
+            d.*,
+            u.name as uploader_name,
+            u.email as uploader_email
+        FROM documents d
+        JOIN users u ON d.uploaded_by = u.id
+        WHERE d.id = ?
+    ''', (doc_id,)).fetchone()
+    conn.close()
+    return dict(document) if document else None
+
+def create_document(idea_id, user_id, original_filename, stored_filename, file_size, file_type, description=None):
+    """Create a new document record"""
+    conn = get_db()
+    cursor = conn.execute('''
+        INSERT INTO documents (
+            idea_id, uploaded_by, original_filename, stored_filename, 
+            file_size, file_type, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (idea_id, user_id, original_filename, stored_filename, file_size, file_type, description))
+    doc_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return doc_id
+
+def delete_document(doc_id):
+    """Delete a document record and file"""
+    doc = get_document_by_id(doc_id)
+    if doc:
+        # Delete file from filesystem
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], doc['stored_filename'])
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        
+        # Delete database record
+        conn = get_db()
+        conn.execute('DELETE FROM documents WHERE id = ?', (doc_id,))
+        conn.commit()
+        conn.close()
+        return True
+    return False
+
+def get_document_count_by_idea(idea_id):
+    """Get count of documents for an idea"""
+    conn = get_db()
+    count = conn.execute('SELECT COUNT(*) FROM documents WHERE idea_id = ?', (idea_id,)).fetchone()[0]
+    conn.close()
+    return count
+
+# ============================================
 # Authentication Decorator
 # ============================================
 
@@ -421,11 +540,29 @@ def idea_detail(idea_id):
     # Get current status index for stepper
     current_index = IDEA_STATUSES.index(idea['status']) if idea['status'] in IDEA_STATUSES else 0
     
+    # Get documents for this idea
+    documents = get_documents_by_idea(idea_id)
+    
+    # Check if user can upload documents
+    can_upload = (
+        user['role'] == 'ADMIN' or
+        idea['submitter_id'] == user['id'] or
+        idea['spoc_id'] == user['id']
+    )
+    
+    # Check if user can delete documents
+    can_delete = user['role'] == 'ADMIN' or idea['submitter_id'] == user['id']
+    
     return render_template('idea_detail.html',
         user=user,
         idea=idea,
         statuses=IDEA_STATUSES,
-        current_index=current_index
+        current_index=current_index,
+        documents=documents,
+        can_upload=can_upload,
+        can_delete=can_delete,
+        allowed_extensions=', '.join(ALLOWED_EXTENSIONS),
+        format_file_size=format_file_size
     )
 
 @app.route('/ideas/<int:idea_id>/status', methods=['POST'])
@@ -455,6 +592,147 @@ def update_status(idea_id):
         flash('Not authorized to update status', 'error')
     
     return redirect(url_for('idea_detail', idea_id=idea_id))
+
+# ============================================
+# Document Upload Routes
+# ============================================
+
+@app.route('/ideas/<int:idea_id>/documents/upload', methods=['POST'])
+@login_required
+def upload_document(idea_id):
+    """Upload a document for an idea"""
+    user = get_current_user()
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea:
+        flash('Idea not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Check if user can upload
+    can_upload = (
+        user['role'] == 'ADMIN' or
+        idea['submitter_id'] == user['id'] or
+        idea['spoc_id'] == user['id']
+    )
+    
+    if not can_upload:
+        flash('Not authorized to upload documents', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    # Check if file was uploaded
+    if 'document' not in request.files:
+        flash('No file selected', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    file = request.files['document']
+    
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    if file and allowed_file(file.filename):
+        # Generate unique filename
+        original_filename = secure_filename(file.filename)
+        file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+        stored_filename = f"{uuid.uuid4().hex}_{idea_id}.{file_ext}"
+        
+        # Ensure upload directory exists
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # Save file
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], stored_filename)
+        file.save(file_path)
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        # Get file type
+        file_type = get_file_type(original_filename)
+        
+        # Get description from form
+        description = request.form.get('description', '')
+        
+        # Create database record
+        create_document(
+            idea_id=idea_id,
+            user_id=user['id'],
+            original_filename=original_filename,
+            stored_filename=stored_filename,
+            file_size=file_size,
+            file_type=file_type,
+            description=description
+        )
+        
+        flash(f'Document "{original_filename}" uploaded successfully!', 'success')
+    else:
+        allowed = ', '.join(ALLOWED_EXTENSIONS)
+        flash(f'Invalid file type. Allowed types: {allowed}', 'error')
+    
+    return redirect(url_for('idea_detail', idea_id=idea_id))
+
+@app.route('/documents/<int:doc_id>/download')
+@login_required
+def download_document(doc_id):
+    """Download a document"""
+    user = get_current_user()
+    document = get_document_by_id(doc_id)
+    
+    if not document:
+        flash('Document not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    idea = get_idea_by_id(document['idea_id'])
+    
+    # Check access
+    can_view = (
+        user['role'] == 'ADMIN' or
+        (user['role'] == 'OWNER' and idea['submitter_id'] == user['id']) or
+        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id']) or
+        (user['role'] == 'CGI_EXEC' and idea['status'] == 'Waiting for CGI approval') or
+        (user['role'] == 'LT_EXEC' and idea['status'] == 'Waiting for LT approval')
+    )
+    
+    if not can_view:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'],
+        document['stored_filename'],
+        download_name=document['original_filename'],
+        as_attachment=True
+    )
+
+@app.route('/documents/<int:doc_id>/delete', methods=['POST'])
+@login_required
+def delete_document_route(doc_id):
+    """Delete a document"""
+    user = get_current_user()
+    document = get_document_by_id(doc_id)
+    
+    if not document:
+        flash('Document not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    idea = get_idea_by_id(document['idea_id'])
+    
+    # Check if user can delete
+    can_delete = (
+        user['role'] == 'ADMIN' or
+        idea['submitter_id'] == user['id'] or
+        document['uploaded_by'] == user['id']
+    )
+    
+    if not can_delete:
+        flash('Not authorized to delete this document', 'error')
+        return redirect(url_for('idea_detail', idea_id=document['idea_id']))
+    
+    if delete_document(doc_id):
+        flash('Document deleted successfully', 'success')
+    else:
+        flash('Error deleting document', 'error')
+    
+    return redirect(url_for('idea_detail', idea_id=document['idea_id']))
 
 @app.route('/kanban')
 @login_required
@@ -587,6 +865,20 @@ def date_filter(value):
     except:
         return value
 
+@app.template_filter('datetime')
+def datetime_filter(value):
+    if value is None:
+        return '-'
+    try:
+        dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        return dt.strftime('%b %d, %Y %H:%M')
+    except:
+        return value
+
+@app.template_filter('filesize')
+def filesize_filter(value):
+    return format_file_size(value) if value else '-'
+
 # ============================================
 # Main
 # ============================================
@@ -594,5 +886,6 @@ def date_filter(value):
 if __name__ == '__main__':
     # Ensure data directory exists
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     
     app.run(debug=True, host='0.0.0.0', port=5000)
