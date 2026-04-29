@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}SPOC Dashboard - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            <h1 class="text-3xl font-bold">SPOC Dashboard</h1>
+            <p class="text-gray-500 mt-1">Manage and track ideas assigned to you</p>
+        </div>
+        <a href="{{ url_for('new_idea') }}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Submit New Idea
+        </a>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-500">Total Assigned</span>
+                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            </div>
+            <div class="text-3xl font-bold">{{ stats.total_assigned }}</div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-500">Pending Review</span>
+                <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div class="text-3xl font-bold text-yellow-600">{{ stats.pending_review }}</div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-500">In Progress</span>
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <div class="text-3xl font-bold text-amber-600">{{ stats.in_progress }}</div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-500">Completed</span>
+                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div class="text-3xl font-bold text-green-600">{{ stats.completed }}</div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-medium text-gray-500">Total Savings</span>
+                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div class="text-3xl font-bold text-emerald-600">{{ stats.total_savings|currency }}</div>
+        </div>
+    </div>
+
+    <!-- Status Distribution -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold mb-4">Status Distribution</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for status in statuses %}
+            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium
+                {% if status == 'Open' %}bg-slate-100 text-slate-800
+                {% elif status == 'ScoreIT' %}bg-purple-100 text-purple-800
+                {% elif status == 'Business Case Template' %}bg-indigo-100 text-indigo-800
+                {% elif status == 'Waiting for CGI approval' %}bg-amber-100 text-amber-800
+                {% elif status == 'Waiting for LT approval' %}bg-orange-100 text-orange-800
+                {% elif status == 'Ready for implementation' %}bg-cyan-100 text-cyan-800
+                {% elif status == 'Implementation in progress' %}bg-blue-100 text-blue-800
+                {% else %}bg-green-100 text-green-800{% endif %}">
+                {{ status }}: {{ status_counts.get(status, 0) }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Ideas List -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h2 class="text-lg font-semibold">Assigned Ideas</h2>
+            <p class="text-sm text-gray-500">
+                {% if ideas %}Showing {{ ideas|length }} ideas assigned to you{% else %}No ideas assigned yet{% endif %}
+            </p>
+        </div>
+        <div class="p-6">
+            {% if ideas %}
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitter</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Savings</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for idea in ideas %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-4">
+                                <a href="{{ url_for('idea_detail', idea_id=idea.id) }}" class="font-medium text-blue-600 hover:text-blue-800">
+                                    {{ idea.title }}
+                                </a>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                    {% if idea.status == 'Open' %}bg-slate-100 text-slate-800
+                                    {% elif idea.status == 'ScoreIT' %}bg-purple-100 text-purple-800
+                                    {% elif idea.status == 'Business Case Template' %}bg-indigo-100 text-indigo-800
+                                    {% elif idea.status == 'Waiting for CGI approval' %}bg-amber-100 text-amber-800
+                                    {% elif idea.status == 'Waiting for LT approval' %}bg-orange-100 text-orange-800
+                                    {% elif idea.status == 'Ready for implementation' %}bg-cyan-100 text-cyan-800
+                                    {% elif idea.status == 'Implementation in progress' %}bg-blue-100 text-blue-800
+                                    {% else %}bg-green-100 text-green-800{% endif %}">
+                                    {{ idea.status }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-4 text-sm text-gray-600">{{ idea.category }}</td>
+                            <td class="px-4 py-4 text-sm text-gray-600">{{ idea.submitter_name }}</td>
+                            <td class="px-4 py-4 text-sm text-gray-500">{{ idea.created_at|date }}</td>
+                            <td class="px-4 py-4 text-sm font-medium text-green-600">
+                                {% if idea.proj_savings %}{{ idea.proj_savings|currency }}{% else %}-{% endif %}
+                            </td>
+                            <td class="px-4 py-4">
+                                <a href="{{ url_for('idea_detail', idea_id=idea.id) }}" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md text-sm font-medium hover:bg-blue-100 transition-colors">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <h3 class="text-lg font-medium text-gray-900">No ideas assigned</h3>
+                <p class="text-gray-500 mt-2">Ideas will appear here when they are assigned to you based on their category.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
