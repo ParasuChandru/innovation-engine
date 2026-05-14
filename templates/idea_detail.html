@@ -120,7 +120,48 @@
                 <p class="text-gray-700 whitespace-pre-wrap">{{ idea.business_impact }}</p>
             </div>
             {% endif %}
+
+            <!-- Benefits Section - Visible to all, editable by SPOC/Admin -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-semibold">Benefits & Savings</h3>
+                    {% if user.role == 'ADMIN' or (user.role == 'SPOC' and idea.spoc_id == user.id) %}
+                    <a href="{{ url_for('edit_benefits', idea_id=idea.id) }}" 
+                       class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                        Edit Benefits
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="grid sm:grid-cols-2 gap-4">
+                    <div class="bg-green-50 rounded-lg p-4">
+                        <div class="text-sm text-green-600 font-medium">Projected Savings</div>
+                        <div class="text-2xl font-bold text-green-700 mt-1">
+                            {{ idea.proj_savings|currency if idea.proj_savings else 'Not set' }}
+                        </div>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <div class="text-sm text-blue-600 font-medium">Hours Saved</div>
+                        <div class="text-2xl font-bold text-blue-700 mt-1">
+                            {% if idea.hours_saved %}
+                            {{ idea.hours_saved }} <span class="text-base font-normal">hrs/month</span>
+                            {% else %}
+                            Not set
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% if idea.savings_measurement %}
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <div class="text-sm text-gray-500 font-medium mb-1">Savings Measurement</div>
+                    <p class="text-gray-700">{{ idea.savings_measurement }}</p>
+                </div>
+                {% endif %}
+            </div>
         </div>
+
         <div class="space-y-6">
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-base font-semibold mb-4">Submitted By</h3>

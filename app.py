@@ -238,6 +238,21 @@ def update_idea_status(idea_id, new_status):
     conn.commit()
     conn.close()
 
+def update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact):
+    """Update idea benefits fields"""
+    conn = get_db()
+    conn.execute('''
+        UPDATE ideas 
+        SET proj_savings = ?, 
+            hours_saved = ?, 
+            savings_measurement = ?, 
+            business_impact = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (proj_savings, hours_saved, savings_measurement, business_impact, idea_id))
+    conn.commit()
+    conn.close()
+
 def get_ideas_grouped_by_status():
     """Get ideas grouped by status for Kanban"""
     all_ideas = get_all_ideas()
@@ -473,6 +488,75 @@ def update_status(idea_id):
     else:
         flash('Not authorized to update status', 'error')
     
+    return redirect(url_for('idea_detail', idea_id=idea_id))
+
+@app.route('/ideas/<int:idea_id>/edit-benefits', methods=['GET'])
+@login_required
+def edit_benefits(idea_id):
+    """Edit benefits page - only for assigned SPOC and Admin"""
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+    
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea:
+        flash('Idea not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Check authorization - only assigned SPOC or Admin can edit benefits
+    can_edit = (
+        user['role'] == 'ADMIN' or
+        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id'])
+    )
+    
+    if not can_edit:
+        flash('Access denied. Only the assigned SPOC or Admin can edit benefits.', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    return render_template('edit_benefits.html',
+        user=user,
+        idea=idea
+    )
+
+@app.route('/ideas/<int:idea_id>/edit-benefits', methods=['POST'])
+@login_required
+def update_benefits(idea_id):
+    """Update benefits - only for assigned SPOC and Admin"""
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+    
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea:
+        flash('Idea not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    # Check authorization - only assigned SPOC or Admin can update benefits
+    can_edit = (
+        user['role'] == 'ADMIN' or
+        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id'])
+    )
+    
+    if not can_edit:
+        flash('Access denied. Only the assigned SPOC or Admin can edit benefits.', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    # Get form data
+    proj_savings = request.form.get('proj_savings')
+    hours_saved = request.form.get('hours_saved')
+    savings_measurement = request.form.get('savings_measurement')
+    business_impact = request.form.get('business_impact')
+    
+    # Convert to appropriate types
+    proj_savings = float(proj_savings) if proj_savings else None
+    hours_saved = float(hours_saved) if hours_saved else None
+    
+    # Update database
+    update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact)
+    
+    flash('Benefits updated successfully!', 'success')
     return redirect(url_for('idea_detail', idea_id=idea_id))
 
 @app.route('/kanban')

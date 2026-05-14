@@ -68,6 +68,8 @@ def setup_database():
             tools_used TEXT,
             est_cost_time TEXT,
             proj_savings REAL,
+            hours_saved REAL,
+            savings_measurement TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (submitter_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -87,6 +89,27 @@ def setup_database():
     
     print('✅ Database schema created successfully!')
     print(f'   Database location: {DB_PATH}')
+
+def migrate_database():
+    """Add new columns to existing database if they don't exist"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Check if hours_saved column exists
+    cursor.execute("PRAGMA table_info(ideas)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'hours_saved' not in columns:
+        print('Adding hours_saved column...')
+        cursor.execute('ALTER TABLE ideas ADD COLUMN hours_saved REAL')
+    
+    if 'savings_measurement' not in columns:
+        print('Adding savings_measurement column...')
+        cursor.execute('ALTER TABLE ideas ADD COLUMN savings_measurement TEXT')
+    
+    conn.commit()
+    conn.close()
+    print('✅ Database migration complete!')
 
 def seed_database():
     """Seed database with sample data"""
@@ -147,7 +170,7 @@ def seed_database():
     
     print(f'✅ Inserted {len(spoc_mappings)} SPOC mappings')
     
-    # Insert sample ideas
+    # Insert sample ideas (now with hours_saved and savings_measurement)
     ideas = [
         ('Automated Report Generation', user_ids['john.smith@company.com'], 
          user_ids['sarah.johnson@company.com'], 'Open', 'Production Services', 'Reporting',
@@ -155,7 +178,7 @@ def seed_database():
          'Implement automated reporting using Python scripts and scheduled tasks',
          'IT team support for server access', '25 analysts',
          'High - reduces manual effort significantly', 'Medium',
-         'Python, Power BI', '2 months, $5000', 50000),
+         'Python, Power BI', '2 months, $5000', 50000, 80, 'Time tracking before/after automation'),
         
         ('Customer Feedback AI Analysis', user_ids['anna.garcia@company.com'],
          user_ids['james.wilson@company.com'], 'Waiting for CGI approval', 'Customer Experience', 'Analytics',
@@ -163,7 +186,7 @@ def seed_database():
          'Deploy NLP-based sentiment analysis tool',
          'Data Science team, Cloud infrastructure', 'Customer Service team (40 people)',
          'High - improves customer satisfaction metrics', 'High',
-         'Python, TensorFlow, AWS', '4 months, $25000', 120000),
+         'Python, TensorFlow, AWS', '4 months, $25000', 120000, 160, 'Customer satisfaction score improvement'),
         
         ('Invoice Processing Automation', user_ids['tom.harris@company.com'],
          user_ids['sarah.johnson@company.com'], 'Waiting for CGI approval', 'Finance & Accounting', 'AP Automation',
@@ -171,7 +194,7 @@ def seed_database():
          'OCR-based invoice scanning and auto-matching system',
          'Finance team validation, IT integration support', 'Finance department (15 people)',
          'Medium - reduces processing time by 60%', 'Medium',
-         'UiPath, SAP integration', '3 months, $15000', 75000),
+         'UiPath, SAP integration', '3 months, $15000', 75000, 120, 'Processing time reduction and error rate'),
         
         ('Employee Onboarding Portal', user_ids['nancy.white@company.com'],
          user_ids['mike.chen@company.com'], 'Waiting for LT approval', 'Human Resources', 'Employee Experience',
@@ -179,7 +202,7 @@ def seed_database():
          'Unified self-service onboarding portal with document management',
          'HR team, IT security review', '500+ new hires annually',
          'Medium - improves new hire experience', 'Medium',
-         'React, Node.js, SharePoint', '4 months, $30000', 45000),
+         'React, Node.js, SharePoint', '4 months, $30000', 45000, 40, 'Onboarding completion time and satisfaction surveys'),
         
         ('Inventory Tracking IoT System', user_ids['john.smith@company.com'],
          user_ids['emily.davis@company.com'], 'Ready for implementation', 'Supply Chain', 'Inventory Management',
@@ -187,7 +210,7 @@ def seed_database():
          'IoT sensors with real-time dashboard',
          'Operations team, IoT vendor', 'Warehouse team (30 people)',
          'High - prevents stockouts and overstock', 'High',
-         'IoT sensors, Azure IoT Hub, Power BI', '6 months, $50000', 200000),
+         'IoT sensors, Azure IoT Hub, Power BI', '6 months, $50000', 200000, 200, 'Inventory accuracy and stockout incidents'),
         
         ('Marketing Campaign Analytics', user_ids['anna.garcia@company.com'],
          user_ids['james.wilson@company.com'], 'Implementation in progress', 'Marketing', 'Analytics',
@@ -195,7 +218,7 @@ def seed_database():
          'Unified analytics dashboard with attribution modeling',
          'Marketing team, Data team', 'Marketing team (20 people)',
          'High - optimizes marketing spend', 'Medium',
-         'Google Analytics, Tableau, Python', '3 months, $20000', 80000),
+         'Google Analytics, Tableau, Python', '3 months, $20000', 80000, 60, 'Marketing ROI and attribution accuracy'),
         
         ('Server Monitoring Automation', user_ids['tom.harris@company.com'],
          user_ids['emily.davis@company.com'], 'Deploy and Done', 'IT Infrastructure', 'DevOps',
@@ -203,7 +226,7 @@ def seed_database():
          'Automated monitoring with alerting system',
          'IT Ops team', 'IT team (10 people)',
          'High - prevents downtime', 'Low',
-         'Prometheus, Grafana, PagerDuty', '1 month, $5000', 30000),
+         'Prometheus, Grafana, PagerDuty', '1 month, $5000', 30000, 100, 'Downtime reduction and incident response time'),
         
         ('Contract Management System', user_ids['nancy.white@company.com'],
          user_ids['sarah.johnson@company.com'], 'ScoreIT', 'Production Services', 'Legal',
@@ -211,7 +234,7 @@ def seed_database():
          'Digital contract repository with renewal alerts',
          'Legal team, IT team', 'Legal and Procurement (25 people)',
          'Medium - ensures timely renewals', 'Medium',
-         'DocuSign, SharePoint', '2 months, $10000', 35000),
+         'DocuSign, SharePoint', '2 months, $10000', 35000, 30, 'Missed renewal rate and negotiation savings'),
     ]
     
     cursor.executemany('''
@@ -219,8 +242,8 @@ def seed_database():
             title, submitter_id, spoc_id, status, category, sub_category,
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
-            est_cost_time, proj_savings
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            est_cost_time, proj_savings, hours_saved, savings_measurement
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', ideas)
     
     print(f'✅ Inserted {len(ideas)} sample ideas')
@@ -240,4 +263,5 @@ def seed_database():
 
 if __name__ == '__main__':
     setup_database()
+    migrate_database()
     seed_database()
