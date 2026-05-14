@@ -203,8 +203,9 @@ def create_idea(data):
             title, submitter_id, spoc_id, status, category, sub_category,
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
-            est_cost_time, proj_savings
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            est_cost_time, proj_savings, hours_saved, savings_measurement,
+            target_completion_date, target_pi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['title'],
         data['submitter_id'],
@@ -220,7 +221,11 @@ def create_idea(data):
         data.get('complexity'),
         data.get('tools_used'),
         data.get('est_cost_time'),
-        data.get('proj_savings')
+        data.get('proj_savings'),
+        data.get('hours_saved'),
+        data.get('savings_measurement'),
+        data.get('target_completion_date'),
+        data.get('target_pi')
     ))
     idea_id = cursor.lastrowid
     conn.commit()
@@ -420,7 +425,11 @@ def new_idea():
             'complexity': request.form.get('complexity'),
             'tools_used': request.form.get('tools_used'),
             'est_cost_time': request.form.get('est_cost_time'),
-            'proj_savings': float(request.form.get('proj_savings')) if request.form.get('proj_savings') else None
+            'proj_savings': float(request.form.get('proj_savings')) if request.form.get('proj_savings') else None,
+            'hours_saved': float(request.form.get('hours_saved')) if request.form.get('hours_saved') else None,
+            'savings_measurement': request.form.get('savings_measurement'),
+            'target_completion_date': request.form.get('target_completion_date') or None,
+            'target_pi': request.form.get('target_pi')
         }
         
         idea_id = create_idea(idea_data)

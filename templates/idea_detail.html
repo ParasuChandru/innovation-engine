@@ -121,7 +121,7 @@
             </div>
             {% endif %}
 
-            <!-- Benefits Section - Visible to all, editable by SPOC/Admin -->
+            <!-- Benefits & Savings Section -->
             <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="font-semibold">Benefits & Savings</h3>
@@ -160,8 +160,46 @@
                 </div>
                 {% endif %}
             </div>
+
+            <!-- Timeline & Target Section (NEW) -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="font-semibold mb-4">Timeline & Target</h3>
+                <div class="grid sm:grid-cols-2 gap-4">
+                    <div class="bg-purple-50 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            <span class="text-sm text-purple-600 font-medium">Target Completion Date</span>
+                        </div>
+                        <div class="text-xl font-bold text-purple-700">
+                            {% if idea.target_completion_date %}
+                            {{ idea.target_completion_date }}
+                            {% else %}
+                            Not set
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="bg-indigo-50 rounded-lg p-4">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            <span class="text-sm text-indigo-600 font-medium">Target PI</span>
+                        </div>
+                        <div class="text-xl font-bold text-indigo-700">
+                            {% if idea.target_pi %}
+                            {{ idea.target_pi }}
+                            {% else %}
+                            Not set
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
+        <!-- Sidebar -->
         <div class="space-y-6">
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-base font-semibold mb-4">Submitted By</h3>
@@ -179,10 +217,14 @@
                 <h3 class="text-base font-semibold mb-4">Details</h3>
                 <div class="space-y-3 text-sm">
                     <div><span class="text-gray-500">Created:</span> <span class="font-medium">{{ idea.created_at|date }}</span></div>
+                    {% if idea.sub_category %}<div><span class="text-gray-500">Sub-Category:</span> <span class="font-medium">{{ idea.sub_category }}</span></div>{% endif %}
                     {% if idea.users_impacted %}<div><span class="text-gray-500">Users Impacted:</span> <span class="font-medium">{{ idea.users_impacted }}</span></div>{% endif %}
                     {% if idea.tools_used %}<div><span class="text-gray-500">Tools:</span> <span class="font-medium">{{ idea.tools_used }}</span></div>{% endif %}
                     {% if idea.est_cost_time %}<div><span class="text-gray-500">Est. Cost & Time:</span> <span class="font-medium">{{ idea.est_cost_time }}</span></div>{% endif %}
                     {% if idea.proj_savings %}<div><span class="text-gray-500">Projected Savings:</span> <span class="font-medium text-green-600">{{ idea.proj_savings|currency }}</span></div>{% endif %}
+                    {% if idea.hours_saved %}<div><span class="text-gray-500">Hours Saved:</span> <span class="font-medium text-blue-600">{{ idea.hours_saved }} hrs/month</span></div>{% endif %}
+                    {% if idea.target_completion_date %}<div><span class="text-gray-500">Target Date:</span> <span class="font-medium text-purple-600">{{ idea.target_completion_date }}</span></div>{% endif %}
+                    {% if idea.target_pi %}<div><span class="text-gray-500">Target PI:</span> <span class="font-medium text-indigo-600">{{ idea.target_pi }}</span></div>{% endif %}
                 </div>
             </div>
         </div>
