@@ -3,15 +3,12 @@ Innovation Engine - Flask Application
 Enterprise Idea Submission Workflow Management
 """
 
-from flask import (Flask, render_template, request, redirect, url_for,
-                   session, jsonify, flash, send_from_directory)
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_cors import CORS
 from functools import wraps
 import sqlite3
 import os
 from datetime import datetime
-from werkzeug.utils import secure_filename
-import uuid
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'innovation-engine-secret-key-change-in-production')
@@ -19,11 +16,6 @@ CORS(app)
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'innovation.db')
-
-# Uploads config
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Workflow statuses
 IDEA_STATUSES = [
@@ -55,11 +47,6 @@ CATEGORIES = [
 # ============================================
 # Database Functions
 # ============================================
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def get_db():
     """Get database connection"""
@@ -215,10 +202,10 @@ def create_idea(data):
         INSERT INTO ideas (
             title, submitter_id, spoc_id, status, category, sub_category,
             problem_statement, proposed_solution, support_needed,
-            users_impacted, business_impact, complexity, tools_used, document_filename,
+            users_impacted, business_impact, complexity, tools_used,
             est_cost_time, proj_savings, hours_saved, savings_measurement,
             target_completion_date, target_pi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['title'],
         data['submitter_id'],
@@ -233,7 +220,6 @@ def create_idea(data):
         data.get('business_impact'),
         data.get('complexity'),
         data.get('tools_used'),
-        data.get('document_filename'),
         data.get('est_cost_time'),
         data.get('proj_savings'),
         data.get('hours_saved'),
@@ -414,25 +400,6 @@ def dashboard():
         }
     )
 
-@app.route('/ideas/<int:idea_id>/download')
-@login_required
-def download_document(idea_id):
-    """Download an idea's attached document"""
-    idea = get_idea_by_id(idea_id)
-    
-    if not idea or not idea['document_filename']:
-        flash('Document not found.', 'error')
-        return redirect(url_for('idea_detail', idea_id=idea_id))
-    
-    # Basic access check (simplified)
-    if session.get('user_role') not in USER_ROLES:
-        flash('Access denied.', 'error')
-        return redirect(url_for('dashboard'))
-
-    return send_from_directory(
-        app.config['UPLOAD_FOLDER'], idea['document_filename'], as_attachment=True
-    )
-
 @app.route('/ideas/new', methods=['GET', 'POST'])
 @login_required
 def new_idea():
@@ -442,23 +409,6 @@ def new_idea():
         # Get SPOC for category
         category = request.form.get('category')
         spoc = get_spoc_by_category(category)
-        
-        # Handle file upload
-        document_filename = None
-        if 'document' in request.files:
-            file = request.files['document']
-            if file.filename and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                ext = filename.rsplit('.', 1)[1].lower()
-                unique_filename = f"{uuid.uuid4()}.{ext}"
-                
-                # Create uploads directory if it doesn't exist
-                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
-                document_filename = unique_filename
-            elif file.filename and not allowed_file(file.filename):
-                flash('Invalid file type. Allowed types are: pdf, doc, docx, xls, xlsx, ppt, pptx.', 'error')
-                return render_template('idea_form.html', user=user, categories=CATEGORIES)
         
         # Create idea
         idea_data = {
@@ -475,7 +425,6 @@ def new_idea():
             'complexity': request.form.get('complexity'),
             'tools_used': request.form.get('tools_used'),
             'est_cost_time': request.form.get('est_cost_time'),
-            'document_filename': document_filename,
             'proj_savings': float(request.form.get('proj_savings')) if request.form.get('proj_savings') else None,
             'hours_saved': float(request.form.get('hours_saved')) if request.form.get('hours_saved') else None,
             'savings_measurement': request.form.get('savings_measurement'),
