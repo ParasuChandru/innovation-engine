@@ -3,7 +3,8 @@ Innovation Engine - Flask Application
 Enterprise Idea Submission Workflow Management
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_from_directory
+from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from functools import wraps
 import sqlite3
@@ -12,6 +13,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'innovation-engine-secret-key-change-in-production')
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 CORS(app)
 
 # Database path
@@ -204,8 +206,8 @@ def create_idea(data):
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
             est_cost_time, proj_savings, hours_saved, savings_measurement,
-            target_completion_date, target_pi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            target_completion_date, target_pi, document_filename
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['title'],
         data['submitter_id'],
@@ -225,7 +227,8 @@ def create_idea(data):
         data.get('hours_saved'),
         data.get('savings_measurement'),
         data.get('target_completion_date'),
-        data.get('target_pi')
+        data.get('target_pi'),
+        data.get('document_filename')
     ))
     idea_id = cursor.lastrowid
     conn.commit()
@@ -410,6 +413,14 @@ def new_idea():
         category = request.form.get('category')
         spoc = get_spoc_by_category(category)
         
+        # Handle file upload
+        document_filename = None
+        if 'document' in request.files:
+            file = request.files['document']
+            if file.filename != '':
+                document_filename = secure_filename(file.filename)
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], document_filename))
+
         # Create idea
         idea_data = {
             'title': request.form.get('title'),
@@ -429,7 +440,8 @@ def new_idea():
             'hours_saved': float(request.form.get('hours_saved')) if request.form.get('hours_saved') else None,
             'savings_measurement': request.form.get('savings_measurement'),
             'target_completion_date': request.form.get('target_completion_date') or None,
-            'target_pi': request.form.get('target_pi')
+            'target_pi': request.form.get('target_pi'),
+            'document_filename': document_filename
         }
         
         idea_id = create_idea(idea_data)
@@ -470,6 +482,12 @@ def idea_detail(idea_id):
         statuses=IDEA_STATUSES,
         current_index=current_index
     )
+
+@app.route('/uploads/<filename>')
+@login_required
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 
 @app.route('/ideas/<int:idea_id>/status', methods=['POST'])
 @login_required

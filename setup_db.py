@@ -70,6 +70,7 @@ def setup_database():
             proj_savings REAL,
             hours_saved REAL,
             savings_measurement TEXT,
+            document_filename TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (submitter_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -106,6 +107,10 @@ def migrate_database():
     if 'savings_measurement' not in columns:
         print('Adding savings_measurement column...')
         cursor.execute('ALTER TABLE ideas ADD COLUMN savings_measurement TEXT')
+        
+    if 'document_filename' not in columns:
+        print('Adding document_filename column...')
+        cursor.execute('ALTER TABLE ideas ADD COLUMN document_filename TEXT')
     
     conn.commit()
     conn.close()

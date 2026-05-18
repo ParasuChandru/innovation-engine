@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import sqlite3
+import io
 from datetime import datetime
 
 # Test results
@@ -233,6 +234,85 @@ def test_flask_routes_registered():
         return False, str(e)[:50]
 
 # ============================================
+# FEATURE TESTS
+# ============================================
+
+def test_document_upload_feature():
+    """Test the document upload feature"""
+    try:
+        sys.path.insert(0, BASE_DIR)
+        from app import app, get_db
+    except Exception as e:
+        return False, f"Failed to import app: {e}"
+
+    # 1. Setup - Create a dummy file and test data
+    test_filename = "test_document.pdf"
+    test_content = b"This is a test document."
+    test_data = {
+        'title': 'Idea with Document',
+        'category': 'Production Services',
+        'problem_statement': 'A problem.',
+        'proposed_solution': 'A solution.',
+        'document': (io.BytesIO(test_content), test_filename)
+    }
+
+    # 2. Execute - Simulate a POST request to submit the idea
+    with app.test_client() as client:
+        # Get a valid user from the database to use for the session
+        conn = get_db()
+        test_user = conn.execute("SELECT * FROM users WHERE role = 'OWNER' LIMIT 1").fetchone()
+        conn.close()
+        if not test_user:
+            return False, "Could not find a user with role 'OWNER' in the database."
+        
+        # Simulate login
+        with client.session_transaction() as sess:
+            sess['user_id'] = test_user['id']
+            sess['user_role'] = test_user['role']
+
+        response = client.post('/ideas/new', data=test_data, content_type='multipart/form-data')
+
+    # 3. Verify - Check the results
+    # Check if the response is a redirect (successful submission)
+    if response.status_code != 302:
+        return False, f"Expected redirect (302), got {response.status_code}"
+
+    # Check if the file was saved
+    upload_path = os.path.join(BASE_DIR, 'uploads', test_filename)
+    if not os.path.exists(upload_path):
+        return False, f"File not found in uploads folder: {upload_path}"
+
+    # Check the content of the saved file
+    with open(upload_path, 'rb') as f:
+        saved_content = f.read()
+    if saved_content != test_content:
+        os.remove(upload_path)
+        return False, "File content does not match"
+
+    # Clean up the created file
+    os.remove(upload_path)
+
+    # Check the database for the new entry
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT document_filename FROM ideas WHERE title = ? ORDER BY id DESC LIMIT 1",
+        (test_data['title'],)
+    )
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        return False, "No database entry found for the new idea"
+
+    if result[0] != test_filename:
+        return False, f"Database has wrong filename: got '{result[0]}', expected '{test_filename}'"
+
+    return True, "Document uploaded, saved, and recorded successfully."
+
+
+
+# ============================================
 # MAIN
 # ============================================
 
@@ -278,6 +358,11 @@ def main():
     print("-" * 40)
     run_test("TC-019", "Flask app imports", "Flask", test_flask_app_imports)
     run_test("TC-020", "Routes registered", "Flask", test_flask_routes_registered)
+
+    # Feature Tests
+    print("\n🚀 FEATURE TESTS")
+    print("-" * 40)
+    run_test("TC-021", "Document upload feature", "Feature", test_document_upload_feature)
 
     # Summary
     end_time = datetime.now()
