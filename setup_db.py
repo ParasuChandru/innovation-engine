@@ -41,6 +41,12 @@ def setup_database():
             FOREIGN KEY (spoc_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
+        -- Settings table
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
         -- Ideas table
         CREATE TABLE IF NOT EXISTS ideas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +80,7 @@ def setup_database():
             document_original_filename TEXT,
             target_completion_date TEXT,
             target_pi TEXT,
+            jira_ticket_link TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (submitter_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -126,6 +133,10 @@ def migrate_database():
     if 'target_pi' not in columns:
         print('Adding target_pi column...')
         cursor.execute('ALTER TABLE ideas ADD COLUMN target_pi TEXT')
+
+    if 'jira_ticket_link' not in columns:
+        print('Adding jira_ticket_link column...')
+        cursor.execute('ALTER TABLE ideas ADD COLUMN jira_ticket_link TEXT')
     
     conn.commit()
     conn.close()

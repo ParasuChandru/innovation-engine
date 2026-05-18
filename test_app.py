@@ -8,6 +8,7 @@ import sys
 import json
 import sqlite3
 import io
+from unittest.mock import patch, Mock
 from datetime import datetime
 
 # Test results
@@ -356,6 +357,65 @@ def test_priority_scoring():
 
     return True, "Priority scoring logic is working correctly."
 
+@patch('app.requests.post')
+def test_jira_ticket_creation(mock_post):
+    """Test the Jira ticket creation feature"""
+    try:
+        sys.path.insert(0, BASE_DIR)
+        from app import app, save_setting, get_db
+    except Exception as e:
+        return False, f"Failed to import app: {e}"
+
+    # Mock the response from the Jira API
+    mock_response = Mock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        'key': 'INNOV-123',
+    }
+    mock_post.return_value = mock_response
+
+    # 1. Setup - Configure Jira settings
+    save_setting('jira_domain', 'your-company.atlassian.net')
+    save_setting('jira_email', 'test@example.com')
+    save_setting('jira_api_token', 'fake_token')
+    save_setting('jira_project_key', 'INNOV')
+
+    # 2. Execute - Simulate a POST request to create the ticket
+    with app.test_client() as client:
+        # Get a valid user and an idea from the database
+        conn = get_db()
+        test_user = conn.execute("SELECT * FROM users WHERE role = 'ADMIN' LIMIT 1").fetchone()
+        test_idea = conn.execute("SELECT * FROM ideas LIMIT 1").fetchone()
+        conn.close()
+
+        if not test_user or not test_idea:
+            return False, "Could not find a user or an idea to run the test."
+
+        # Simulate login
+        with client.session_transaction() as sess:
+            sess['user_id'] = test_user['id']
+            sess['user_role'] = test_user['role']
+
+        response = client.post(f'/ideas/{test_idea["id"]}/create-jira-ticket')
+
+    # 3. Verify
+    if response.status_code != 302:
+        return False, f"Expected redirect (302), got {response.status_code}"
+
+    # Check if the mock was called
+    mock_post.assert_called_once()
+
+    # Check the database for the Jira link
+    conn = get_db()
+    idea = conn.execute("SELECT jira_ticket_link FROM ideas WHERE id = ?", (test_idea['id'],)).fetchone()
+    conn.close()
+
+    expected_link = "https://your-company.atlassian.net/browse/INNOV-123"
+    if not idea or idea['jira_ticket_link'] != expected_link:
+        return False, f"Jira link not saved correctly in the database. Expected '{expected_link}', got '{idea['jira_ticket_link'] if idea else 'None'}'"
+
+    return True, "Jira ticket creation and saving link successful."
+
 # ============================================
 # MAIN
 # ============================================
@@ -408,6 +468,7 @@ def main():
     print("-" * 40)
     run_test("TC-021", "Document upload feature", "Feature", test_document_upload_feature)
     run_test("TC-022", "Priority scoring logic", "Feature", test_priority_scoring)
+    run_test("TC-023", "Jira ticket creation", "Feature", test_jira_ticket_creation)
 
     # Summary
     end_time = datetime.now()

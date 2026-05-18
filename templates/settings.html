@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Settings - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-lg shadow">
+        <div class="p-6 border-b">
+            <h1 class="text-xl font-semibold">Admin Settings</h1>
+            <p class="text-gray-500 text-sm">Configure integrations and application settings.</p>
+        </div>
+
+        <div class="p-6 space-y-6">
+            <div class="space-y-4">
+                <h3 class="font-semibold text-lg border-b pb-2">Jira Integration</h3>
+
+                {% if settings.get('jira_domain') and settings.get('jira_api_token') %}
+                <!-- Connected State -->
+                <div id="connected-state">
+                    <div class="bg-green-50 border-l-4 border-green-400 p-4">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm leading-5 font-medium text-green-800">
+                                    Connected to Jira
+                                </p>
+                                <div class="mt-2 text-sm leading-5 text-green-700">
+                                    <p>Domain: {{ settings.get('jira_domain') }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('disconnect_jira') }}" class="mt-4">
+                        <button type="submit" class="w-full bg-red-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-red-700">
+                            Disconnect
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <!-- Disconnected State -->
+                <div id="disconnected-state">
+                    <div id="error-message" class="hidden mb-4 p-4 rounded-lg bg-red-50 text-red-700 border border-red-200"></div>
+                    <form id="jira-connect-form" class="space-y-4">
+                        <div>
+                            <label for="jira_domain" class="block text-sm font-medium text-gray-700 mb-1">Jira Domain *</label>
+                            <input type="text" id="jira_domain" name="jira_domain" required value="{{ settings.get('jira_domain', '') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., your-company.atlassian.net">
+                        </div>
+                        <div>
+                            <label for="jira_email" class="block text-sm font-medium text-gray-700 mb-1">Jira User Email *</label>
+                            <input type="email" id="jira_email" name="jira_email" required value="{{ settings.get('jira_email', '') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., jira-bot@your-company.com">
+                        </div>
+                        <div>
+                            <label for="jira_api_token" class="block text-sm font-medium text-gray-700 mb-1">Jira API Token *</label>
+                            <input type="password" id="jira_api_token" name="jira_api_token" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Enter your Jira API token">
+                            <p class="mt-1 text-xs text-gray-500">
+                                Don't have a token? <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" class="text-blue-600 hover:underline">Create one at Atlassian</a>.
+                            </p>
+                        </div>
+                        <div>
+                            <label for="jira_project_key" class="block text-sm font-medium text-gray-700 mb-1">Jira Project Key *</label>
+                            <input type="text" id="jira_project_key" name="jira_project_key" required value="{{ settings.get('jira_project_key', '') }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="e.g., INNOV">
+                        </div>
+                        <button type="submit" id="connect-btn" class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center">
+                            Connect
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('jira-connect-form');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const connectBtn = document.getElementById('connect-btn');
+                const errorMessage = document.getElementById('error-message');
+
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Connecting...';
+                errorMessage.classList.add('hidden');
+
+                const formData = new FormData(form);
+                const data = Object.fromEntries(formData.entries());
+
+                try {
+                    const response = await fetch('{{ url_for("test_jira_connection") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data),
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+
+                    // On success, reload the page to show the connected state
+                    window.location.reload();
+
+                } catch (error) {
+                    errorMessage.textContent = error.message;
+                    errorMessage.classList.remove('hidden');
+                    connectBtn.disabled = false;
+                    connectBtn.textContent = 'Connect';
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

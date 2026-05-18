@@ -10,6 +10,7 @@ from functools import wraps
 import sqlite3
 import os
 import uuid
+import requests
 from datetime import datetime
 
 app = Flask(__name__)
@@ -290,6 +291,20 @@ def get_all_spoc_mappings():
     conn.close()
     return [dict(m) for m in mappings]
 
+def get_settings():
+    """Get all settings from the database."""
+    conn = get_db()
+    settings_rows = conn.execute('SELECT key, value FROM settings').fetchall()
+    conn.close()
+    return {row['key']: row['value'] for row in settings_rows}
+
+def save_setting(key, value):
+    """Save a setting to the database."""
+    conn = get_db()
+    conn.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, value))
+    conn.commit()
+    conn.close()
+
 def import_spoc_mappings(mappings):
     """Clear and import SPOC mappings"""
     conn = get_db()
@@ -316,6 +331,57 @@ def import_spoc_mappings(mappings):
     conn.commit()
     conn.close()
     return success, failed
+
+def update_idea_jira_link(idea_id, jira_link):
+    """Update an idea with the Jira ticket link."""
+    conn = get_db()
+    conn.execute('UPDATE ideas SET jira_ticket_link = ? WHERE id = ?', (jira_link, idea_id))
+    conn.commit()
+    conn.close()
+
+# ============================================
+# Jira Integration
+# ============================================
+
+def create_jira_ticket(idea):
+    """Creates a Jira ticket for an idea."""
+    settings = get_settings()
+    jira_domain = settings.get('jira_domain')
+    jira_email = settings.get('jira_email')
+    jira_api_token = settings.get('jira_api_token')
+    jira_project_key = settings.get('jira_project_key')
+
+    if not all([jira_domain, jira_email, jira_api_token, jira_project_key]):
+        return None, "Jira settings are not configured."
+
+    url = f"https://{jira_domain}/rest/api/2/issue"
+    auth = (jira_email, jira_api_token)
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "fields": {
+            "project": {
+                "key": jira_project_key
+            },
+            "summary": idea['title'],
+            "description": f"h2. Problem Statement\n{idea['problem_statement']}\n\nh2. Proposed Solution\n{idea['proposed_solution']}",
+            "issuetype": {
+                "name": "Task"
+            }
+        }
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, auth=auth)
+        response.raise_for_status()
+        ticket_data = response.json()
+        ticket_key = ticket_data['key']
+        ticket_url = f"https://{jira_domain}/browse/{ticket_key}"
+        return ticket_url, None
+    except requests.exceptions.RequestException as e:
+        return None, f"Failed to create Jira ticket: {e}"
 
 # ============================================
 # Authentication Decorator
@@ -533,6 +599,20 @@ def download_document(idea_id):
     if not idea or not idea['document_filename']:
         flash('Document not found.', 'error')
         return redirect(url_for('dashboard'))
+
+    # Authorization check for downloading files
+    user = get_current_user()
+    can_download = (
+        user['role'] == 'ADMIN' or
+        idea['submitter_id'] == user['id'] or
+        idea['spoc_id'] == user['id'] or
+        (user['role'] == 'CGI_EXEC' and idea['status'] == 'Waiting for CGI approval') or
+        (user['role'] == 'LT_EXEC' and idea['status'] == 'Waiting for LT approval')
+    )
+
+    if not can_download:
+        flash('You do not have permission to download this file.', 'error')
+        return redirect(url_for('dashboard'))
     
     return send_from_directory(
         app.config['UPLOAD_FOLDER'],
@@ -566,6 +646,30 @@ def update_status(idea_id):
     else:
         flash('Not authorized to update status', 'error')
     
+    return redirect(url_for('idea_detail', idea_id=idea_id))
+
+@app.route('/ideas/<int:idea_id>/create-jira-ticket', methods=['POST'])
+@login_required
+def create_jira_ticket_route(idea_id):
+    idea = get_idea_by_id(idea_id)
+    if not idea:
+        flash('Idea not found.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Authorization check
+    user = get_current_user()
+    if user['role'] != 'ADMIN' and not (user['role'] == 'SPOC' and idea['spoc_id'] == user['id']):
+        flash('You are not authorized to create a Jira ticket for this idea.', 'error')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+
+    ticket_url, error = create_jira_ticket(idea)
+
+    if error:
+        flash(f'Error creating Jira ticket: {error}', 'error')
+    else:
+        update_idea_jira_link(idea_id, ticket_url)
+        flash(f'Successfully created Jira ticket: {ticket_url}', 'success')
+
     return redirect(url_for('idea_detail', idea_id=idea_id))
 
 @app.route('/ideas/<int:idea_id>/edit-benefits', methods=['GET'])
@@ -850,6 +954,65 @@ def admin_import():
     flash(f'Imported {success} mappings. {failed} failed.', 'success' if failed == 0 else 'warning')
     
     return redirect(url_for('admin'))
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = get_current_user()
+        if not user or user['role'] != 'ADMIN':
+            flash('You do not have permission to access this page.', 'error')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/settings', methods=['GET'])
+@login_required
+@admin_required
+def settings():
+    settings = get_settings()
+    return render_template('settings.html', settings=settings)
+
+@app.route('/settings/jira/test', methods=['POST'])
+@login_required
+@admin_required
+def test_jira_connection():
+    data = request.json
+    jira_domain = data.get('jira_domain', '').replace('https://', '').replace('/', '')
+    jira_email = data.get('jira_email')
+    jira_api_token = data.get('jira_api_token')
+
+    if not all([jira_domain, jira_email, jira_api_token]):
+        return jsonify({'success': False, 'message': 'Missing required fields.'}), 400
+
+    # Test credentials by trying to fetch server info
+    url = f"https://{jira_domain}/rest/api/2/serverInfo"
+    auth = (jira_email, jira_api_token)
+    try:
+        response = requests.get(url, auth=auth, timeout=5)
+        response.raise_for_status()
+
+        # If successful, save the credentials
+        save_setting('jira_domain', jira_domain)
+        save_setting('jira_email', jira_email)
+        save_setting('jira_api_token', jira_api_token)
+        save_setting('jira_project_key', data.get('jira_project_key', ''))
+
+        return jsonify({'success': True, 'message': 'Jira connection successful!'})
+    except requests.exceptions.HTTPError as e:
+        return jsonify({'success': False, 'message': f'Connection failed: {e.response.status_code} {e.response.reason}'}), 400
+    except requests.exceptions.RequestException as e:
+        return jsonify({'success': False, 'message': f'Connection failed: {e}'}), 400
+
+@app.route('/settings/jira/disconnect', methods=['POST'])
+@login_required
+@admin_required
+def disconnect_jira():
+    save_setting('jira_domain', '')
+    save_setting('jira_email', '')
+    save_setting('jira_api_token', '')
+    save_setting('jira_project_key', '')
+    flash('Jira connection has been disconnected.', 'success')
+    return redirect(url_for('settings'))
 
 # ============================================
 # Business Logic

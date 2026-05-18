@@ -1,10 +1,10 @@
 {
   "summary": {
-    "total": 22,
-    "passed": 22,
+    "total": 23,
+    "passed": 23,
     "failed": 0,
     "pass_rate": 100.0,
-    "timestamp": "2026-05-18T18:04:07.099922"
+    "timestamp": "2026-05-18T19:39:51.470066"
   },
   "tests": [
     {
@@ -12,14 +12,14 @@
       "name": "Database file exists",
       "module": "Database",
       "status": "PASS",
-      "notes": "DB size: 49152 bytes"
+      "notes": "DB size: 57344 bytes"
     },
     {
       "id": "TC-002",
       "name": "Required tables created",
       "module": "Database",
       "status": "PASS",
-      "notes": "Tables: ['users', 'sqlite_sequence', 'spoc_mapping', 'ideas']"
+      "notes": "Tables: ['users', 'sqlite_sequence', 'spoc_mapping', 'ideas', 'settings']"
     },
     {
       "id": "TC-003",
@@ -160,6 +160,13 @@
       "module": "Feature",
       "status": "PASS",
       "notes": "Priority scoring logic is working correctly."
+    },
+    {
+      "id": "TC-023",
+      "name": "Jira ticket creation",
+      "module": "Feature",
+      "status": "PASS",
+      "notes": "Jira ticket creation and saving link successful."
     }
   ]
 }

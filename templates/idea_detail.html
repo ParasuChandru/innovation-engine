@@ -139,6 +139,25 @@
     </div>
     {% endif %}
 
+    {% if idea.status == 'Ready for implementation' %}
+    <div class="bg-gray-800 text-white rounded-lg p-6">
+        <h3 class="font-semibold text-lg mb-2">Jira Integration</h3>
+        {% if idea.jira_ticket_link %}
+            <p class="text-sm text-gray-300 mb-4">A Jira ticket has been created for this idea.</p>
+            <a href="{{ idea.jira_ticket_link }}" target="_blank" class="w-full bg-gray-600 hover:bg-gray-500 text-white py-3 px-4 rounded-lg font-medium flex items-center justify-center">
+                View Jira Ticket
+            </a>
+        {% else %}
+            <p class="text-sm text-gray-300 mb-4">This idea is ready for implementation. You can create a Jira ticket to begin tracking the work.</p>
+            <form method="POST" action="{{ url_for('create_jira_ticket_route', idea_id=idea.id) }}">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-medium flex items-center justify-center">
+                    Create Jira Ticket
+                </button>
+            </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Main Content Grid -->
     <div class="grid lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2 space-y-6">
