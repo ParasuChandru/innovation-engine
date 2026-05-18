@@ -54,6 +54,14 @@
                                 {{ idea.complexity }}
                             </span>
                             {% endif %}
+                            {% if idea.priority_info %}
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                                {% if idea.priority_info.priority == 'High' %}bg-red-100 text-red-800
+                                {% elif idea.priority_info.priority == 'Medium' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-green-100 text-green-800{% endif %}">
+                                {{ idea.priority_info.priority }} Priority
+                            </span>
+                            {% endif %}
                         </div>
                         <p class="text-xs text-gray-500 line-clamp-2 mb-2">{{ idea.problem_statement }}</p>
                         <div class="flex items-center justify-between text-xs">

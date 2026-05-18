@@ -361,6 +361,12 @@ def logout():
 @login_required
 def dashboard():
     user = get_current_user()
+
+    if not user:
+        # This can happen if the user was deleted but the session cookie remains.
+        session.clear()
+        flash("Your session is invalid. Please log in again.", "warning")
+        return redirect(url_for('login'))
     
     # Get ideas based on role
     if user['role'] == 'OWNER':
@@ -476,11 +482,17 @@ def idea_detail(idea_id):
     # Get current status index for stepper
     current_index = IDEA_STATUSES.index(idea['status']) if idea['status'] in IDEA_STATUSES else 0
     
+    # Calculate priority score if in ScoreIT stage
+    priority_info = None
+    if idea['status'] == 'ScoreIT':
+        priority_info = calculate_priority_score(idea)
+    
     return render_template('idea_detail.html',
         user=user,
         idea=idea,
         statuses=IDEA_STATUSES,
-        current_index=current_index
+        current_index=current_index,
+        priority_info=priority_info
     )
 
 @app.route('/uploads/<filename>')
@@ -591,6 +603,11 @@ def update_benefits(idea_id):
 def kanban():
     user = get_current_user()
     ideas_by_status = get_ideas_grouped_by_status()
+    
+    # Calculate priority for ideas in ScoreIT
+    if 'ScoreIT' in ideas_by_status:
+        for idea in ideas_by_status['ScoreIT']:
+            idea['priority_info'] = calculate_priority_score(idea)
     
     return render_template('kanban.html',
         user=user,
@@ -794,6 +811,75 @@ def admin_import():
     flash(f'Imported {success} mappings. {failed} failed.', 'success' if failed == 0 else 'warning')
     
     return redirect(url_for('admin'))
+
+# ============================================
+# Business Logic
+# ============================================
+
+def calculate_priority_score(idea):
+    """Calculate priority score based on idea attributes"""
+    score = 0
+    breakdown = {}
+
+    # 1. Complexity
+    complexity_map = {'Low': 3, 'Medium': 2, 'High': 1}
+    complexity_score = complexity_map.get(idea.get('complexity'), 0)
+    score += complexity_score
+    breakdown['Complexity'] = f"{complexity_score}/3 points"
+
+    # 2. Projected Savings
+    savings = idea.get('proj_savings') or 0
+    if savings > 50000:
+        savings_score = 3
+    elif savings > 10000:
+        savings_score = 2
+    else:
+        savings_score = 1
+    score += savings_score
+    breakdown['Projected Savings'] = f"{savings_score}/3 points"
+
+    # 3. Hours Saved (per year)
+    hours_saved_monthly = idea.get('hours_saved') or 0
+    hours_saved_yearly = hours_saved_monthly * 12
+    if hours_saved_yearly > 100:
+        hours_score = 3
+    elif hours_saved_yearly > 40:
+        hours_score = 2
+    else:
+        hours_score = 1
+    score += hours_score
+    breakdown['Hours Saved'] = f"{hours_score}/3 points"
+
+    # 4. Users Impacted
+    users_impacted_str = idea.get('users_impacted', '0')
+    try:
+        # Extract numbers from string
+        users_num = int(''.join(filter(str.isdigit, users_impacted_str)))
+    except ValueError:
+        users_num = 0
+    
+    if users_num > 50:
+        users_score = 3
+    elif users_num > 10:
+        users_score = 2
+    else:
+        users_score = 1
+    score += users_score
+    breakdown['Users Impacted'] = f"{users_score}/3 points"
+
+    # Determine priority
+    if score >= 9:
+        priority = 'High'
+    elif score >= 5:
+        priority = 'Medium'
+    else:
+        priority = 'Low'
+        
+    return {
+        'priority': priority,
+        'score': score,
+        'breakdown': breakdown
+    }
 
 # ============================================
 # Template Filters
