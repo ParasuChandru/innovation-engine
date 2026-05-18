@@ -125,6 +125,18 @@
             </form>
         </div>
     </div>
+    {% elif show_generic_advance and next_stage %}
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="font-semibold text-lg mb-2">Move to Next Stage</h3>
+        <p class="text-sm text-gray-600 mb-4">As the assigned SPOC or Admin, you can advance this idea to the next stage in the workflow.</p>
+        <form method="POST" action="{{ url_for('update_status', idea_id=idea.id) }}">
+            <input type="hidden" name="status" value="{{ next_stage }}">
+            <button type="submit" class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 flex items-center justify-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                Advance to: {{ next_stage }}
+            </button>
+        </form>
+    </div>
     {% endif %}
 
     <!-- Main Content Grid -->
@@ -246,9 +258,9 @@
             {% if idea.document_filename %}
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-base font-semibold mb-4">Supporting Document</h3>
-                <a href="{{ url_for('uploaded_file', filename=idea.document_filename) }}" class="inline-flex items-center text-blue-600 hover:underline">
+                <a href="{{ url_for('download_document', idea_id=idea.id) }}" class="inline-flex items-center text-blue-600 hover:underline">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    Download Document
+                    Download {{ idea.document_original_filename }}
                 </a>
             </div>
             {% endif %}

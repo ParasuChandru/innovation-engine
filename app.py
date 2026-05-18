@@ -9,12 +9,19 @@ from flask_cors import CORS
 from functools import wraps
 import sqlite3
 import os
+import uuid
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'innovation-engine-secret-key-change-in-production')
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'xlsx', 'ppt', 'pptx'}
 CORS(app)
+
+def allowed_file(filename):
+    """Check if the file extension is allowed."""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 # Database path
 DB_PATH = os.path.join(os.path.dirname(__file__), 'data', 'innovation.db')
@@ -206,8 +213,8 @@ def create_idea(data):
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
             est_cost_time, proj_savings, hours_saved, savings_measurement,
-            target_completion_date, target_pi, document_filename
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            target_completion_date, target_pi, document_filename, document_original_filename
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['title'],
         data['submitter_id'],
@@ -228,7 +235,8 @@ def create_idea(data):
         data.get('savings_measurement'),
         data.get('target_completion_date'),
         data.get('target_pi'),
-        data.get('document_filename')
+        data.get('document_filename'),
+        data.get('document_original_filename')
     ))
     idea_id = cursor.lastrowid
     conn.commit()
@@ -421,11 +429,20 @@ def new_idea():
         
         # Handle file upload
         document_filename = None
+        document_original_filename = None
         if 'document' in request.files:
             file = request.files['document']
             if file.filename != '':
-                document_filename = secure_filename(file.filename)
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], document_filename))
+                if allowed_file(file.filename):
+                    original_filename = secure_filename(file.filename)
+                    extension = original_filename.rsplit('.', 1)[1]
+                    unique_filename = f"{uuid.uuid4()}.{extension}"
+                    file.save(os.path.join(app.config['UPLOAD_FOLDER'], unique_filename))
+                    document_filename = unique_filename
+                    document_original_filename = original_filename
+                else:
+                    flash('Invalid file type. Allowed types are: pdf, doc, docx, xlsx, ppt, pptx', 'error')
+                    return redirect(request.url)
 
         # Create idea
         idea_data = {
@@ -447,7 +464,8 @@ def new_idea():
             'savings_measurement': request.form.get('savings_measurement'),
             'target_completion_date': request.form.get('target_completion_date') or None,
             'target_pi': request.form.get('target_pi'),
-            'document_filename': document_filename
+            'document_filename': document_filename,
+            'document_original_filename': document_original_filename
         }
         
         idea_id = create_idea(idea_data)
@@ -487,19 +505,41 @@ def idea_detail(idea_id):
     if idea['status'] == 'ScoreIT':
         priority_info = calculate_priority_score(idea)
     
+    # Determine next stage for generic advance button
+    next_stage = None
+    if current_index < len(IDEA_STATUSES) - 1:
+        next_stage = IDEA_STATUSES[current_index + 1]
+
+    # Decide if the generic advance button should be shown
+    show_generic_advance = (
+        (user['role'] == 'ADMIN' or (user['role'] == 'SPOC' and idea['spoc_id'] == user['id'])) and
+        idea['status'] not in ['Waiting for CGI approval', 'Waiting for LT approval', 'Deploy and Done']
+    )
+
     return render_template('idea_detail.html',
         user=user,
         idea=idea,
         statuses=IDEA_STATUSES,
         current_index=current_index,
-        priority_info=priority_info
+        priority_info=priority_info,
+        next_stage=next_stage,
+        show_generic_advance=show_generic_advance
     )
 
-@app.route('/uploads/<filename>')
+@app.route('/download_document/<int:idea_id>')
 @login_required
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
+def download_document(idea_id):
+    idea = get_idea_by_id(idea_id)
+    if not idea or not idea['document_filename']:
+        flash('Document not found.', 'error')
+        return redirect(url_for('dashboard'))
+    
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'],
+        idea['document_filename'],
+        as_attachment=True,
+        download_name=idea['document_original_filename']
+    )
 
 @app.route('/ideas/<int:idea_id>/status', methods=['POST'])
 @login_required
@@ -515,8 +555,7 @@ def update_status(idea_id):
     # Check authorization
     can_update = (
         user['role'] == 'ADMIN' or
-        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id'] and 
-         idea['status'] in ['Open', 'ScoreIT', 'Business Case Template']) or
+        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id']) or
         (user['role'] == 'CGI_EXEC' and idea['status'] == 'Waiting for CGI approval') or
         (user['role'] == 'LT_EXEC' and idea['status'] == 'Waiting for LT approval')
     )
@@ -817,45 +856,51 @@ def admin_import():
 # ============================================
 
 def calculate_priority_score(idea):
-    """Calculate priority score based on idea attributes"""
+    """Calculate priority score based on idea attributes with correct weighting."""
     score = 0
     breakdown = {}
+    weights = {
+        'savings': 0.35,
+        'complexity': 0.25,
+        'hours_saved': 0.25,
+        'users_impacted': 0.15
+    }
 
-    # 1. Complexity
-    complexity_map = {'Low': 3, 'Medium': 2, 'High': 1}
-    complexity_score = complexity_map.get(idea.get('complexity'), 0)
-    score += complexity_score
-    breakdown['Complexity'] = f"{complexity_score}/3 points"
-
-    # 2. Projected Savings
+    # 1. Projected Savings (35% weight)
     savings = idea.get('proj_savings') or 0
-    if savings > 50000:
+    if savings > 100000:
         savings_score = 3
-    elif savings > 10000:
+    elif savings > 50000:
         savings_score = 2
     else:
         savings_score = 1
-    score += savings_score
+    score += savings_score * weights['savings']
     breakdown['Projected Savings'] = f"{savings_score}/3 points"
 
-    # 3. Hours Saved (per year)
-    hours_saved_monthly = idea.get('hours_saved') or 0
-    hours_saved_yearly = hours_saved_monthly * 12
-    if hours_saved_yearly > 100:
+    # 2. Complexity (25% weight)
+    complexity_map = {'Low': 3, 'Medium': 2, 'High': 1}
+    complexity_score = complexity_map.get(idea.get('complexity'), 1)
+    score += complexity_score * weights['complexity']
+    breakdown['Complexity'] = f"{complexity_score}/3 points"
+
+    # 3. Hours Saved per Year (25% weight)
+    hours_saved_yearly = idea.get('hours_saved') or 0
+    if hours_saved_yearly > 1000:
         hours_score = 3
-    elif hours_saved_yearly > 40:
+    elif hours_saved_yearly > 500:
         hours_score = 2
     else:
         hours_score = 1
-    score += hours_score
-    breakdown['Hours Saved'] = f"{hours_score}/3 points"
+    score += hours_score * weights['hours_saved']
+    breakdown['Hours Saved (Yearly)'] = f"{hours_score}/3 points"
 
-    # 4. Users Impacted
+    # 4. Users Impacted (15% weight)
     users_impacted_str = idea.get('users_impacted', '0')
+    users_num = 0
     try:
-        # Extract numbers from string
-        users_num = int(''.join(filter(str.isdigit, users_impacted_str)))
-    except ValueError:
+        if users_impacted_str:
+            users_num = int(''.join(filter(str.isdigit, users_impacted_str)))
+    except (ValueError, TypeError):
         users_num = 0
     
     if users_num > 50:
@@ -864,20 +909,21 @@ def calculate_priority_score(idea):
         users_score = 2
     else:
         users_score = 1
-    score += users_score
+    score += users_score * weights['users_impacted']
     breakdown['Users Impacted'] = f"{users_score}/3 points"
 
-    # Determine priority
-    if score >= 9:
+    # Determine priority based on weighted score
+    # Max possible score is 3. A high score is > 2.0, med is > 1.0
+    if score > 2.0:
         priority = 'High'
-    elif score >= 5:
+    elif score > 1.0:
         priority = 'Medium'
     else:
         priority = 'Low'
         
     return {
         'priority': priority,
-        'score': score,
+        'score': round(score, 2),
         'breakdown': breakdown
     }
 
@@ -908,5 +954,7 @@ def date_filter(value):
 if __name__ == '__main__':
     # Ensure data directory exists
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    # Ensure uploads directory exists
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     app.run(debug=True, host='0.0.0.0', port=5000)

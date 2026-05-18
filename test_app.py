@@ -277,8 +277,26 @@ def test_document_upload_feature():
     if response.status_code != 302:
         return False, f"Expected redirect (302), got {response.status_code}"
 
+    # Check the database for the new entry
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT document_filename, document_original_filename FROM ideas WHERE title = ? ORDER BY id DESC LIMIT 1",
+        (test_data['title'],)
+    )
+    result = cursor.fetchone()
+    conn.close()
+
+    if not result:
+        return False, "No database entry found for the new idea"
+
+    db_filename, db_original_filename = result
+
+    if db_original_filename != test_filename:
+        return False, f"Database has wrong original filename: got '{db_original_filename}', expected '{test_filename}'"
+    
     # Check if the file was saved
-    upload_path = os.path.join(BASE_DIR, 'uploads', test_filename)
+    upload_path = os.path.join(BASE_DIR, 'uploads', db_filename)
     if not os.path.exists(upload_path):
         return False, f"File not found in uploads folder: {upload_path}"
 
@@ -292,25 +310,51 @@ def test_document_upload_feature():
     # Clean up the created file
     os.remove(upload_path)
 
-    # Check the database for the new entry
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT document_filename FROM ideas WHERE title = ? ORDER BY id DESC LIMIT 1",
-        (test_data['title'],)
-    )
-    result = cursor.fetchone()
-    conn.close()
-
-    if not result:
-        return False, "No database entry found for the new idea"
-
-    if result[0] != test_filename:
-        return False, f"Database has wrong filename: got '{result[0]}', expected '{test_filename}'"
-
     return True, "Document uploaded, saved, and recorded successfully."
 
 
+def test_priority_scoring():
+    """Test the priority scoring logic"""
+    try:
+        sys.path.insert(0, BASE_DIR)
+        from app import calculate_priority_score
+    except Exception as e:
+        return False, f"Failed to import calculate_priority_score: {e}"
+
+    # Test case 1: High priority idea
+    idea_high = {
+        'proj_savings': 120000,
+        'complexity': 'Low',
+        'hours_saved': 1100,
+        'users_impacted': '100 people'
+    }
+    result_high = calculate_priority_score(idea_high)
+    if result_high['priority'] != 'High':
+        return False, f"High priority test failed. Expected 'High', got '{result_high['priority']}'"
+
+    # Test case 2: Medium priority idea
+    idea_medium = {
+        'proj_savings': 60000,
+        'complexity': 'Medium',
+        'hours_saved': 600,
+        'users_impacted': '20 people'
+    }
+    result_medium = calculate_priority_score(idea_medium)
+    if result_medium['priority'] != 'Medium':
+        return False, f"Medium priority test failed. Expected 'Medium', got '{result_medium['priority']}'"
+
+    # Test case 3: Low priority idea
+    idea_low = {
+        'proj_savings': 5000,
+        'complexity': 'High',
+        'hours_saved': 10,
+        'users_impacted': ''
+    }
+    result_low = calculate_priority_score(idea_low)
+    if result_low['priority'] != 'Low':
+        return False, f"Low priority test failed. Expected 'Low', got '{result_low['priority']}'"
+
+    return True, "Priority scoring logic is working correctly."
 
 # ============================================
 # MAIN
@@ -363,6 +407,7 @@ def main():
     print("\n🚀 FEATURE TESTS")
     print("-" * 40)
     run_test("TC-021", "Document upload feature", "Feature", test_document_upload_feature)
+    run_test("TC-022", "Priority scoring logic", "Feature", test_priority_scoring)
 
     # Summary
     end_time = datetime.now()

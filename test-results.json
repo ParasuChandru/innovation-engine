@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "total": 22,
+    "passed": 22,
+    "failed": 0,
+    "pass_rate": 100.0,
+    "timestamp": "2026-05-18T18:04:07.099922"
+  },
+  "tests": [
+    {
+      "id": "TC-001",
+      "name": "Database file exists",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "DB size: 49152 bytes"
+    },
+    {
+      "id": "TC-002",
+      "name": "Required tables created",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "Tables: ['users', 'sqlite_sequence', 'spoc_mapping', 'ideas']"
+    },
+    {
+      "id": "TC-003",
+      "name": "Users seeded correctly",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "Users: 13, Roles: ['ADMIN', 'SPOC', 'CGI_EXEC', 'LT_EXEC', 'OWNER']"
+    },
+    {
+      "id": "TC-004",
+      "name": "SPOC mappings configured",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "Mappings: 8"
+    },
+    {
+      "id": "TC-005",
+      "name": "Sample ideas seeded",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "Ideas: 9, Statuses: 7"
+    },
+    {
+      "id": "TC-006",
+      "name": "SPOC auto-assignment query",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "Category 'Production Services' -> Sarah Johnson"
+    },
+    {
+      "id": "TC-007",
+      "name": "Ideas have SPOC assigned",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "9/9 have SPOC"
+    },
+    {
+      "id": "TC-008",
+      "name": "8-stage workflow statuses",
+      "module": "Database",
+      "status": "PASS",
+      "notes": "All 8 statuses defined"
+    },
+    {
+      "id": "TC-009",
+      "name": "Main app.py exists",
+      "module": "Structure",
+      "status": "PASS",
+      "notes": "app.py present"
+    },
+    {
+      "id": "TC-010",
+      "name": "All templates present",
+      "module": "Structure",
+      "status": "PASS",
+      "notes": "All templates present"
+    },
+    {
+      "id": "TC-011",
+      "name": "requirements.txt valid",
+      "module": "Structure",
+      "status": "PASS",
+      "notes": "Flask in requirements"
+    },
+    {
+      "id": "TC-012",
+      "name": "Flask routes defined",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "Routes found: 5/5"
+    },
+    {
+      "id": "TC-013",
+      "name": "SPOC assignment in code",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "Auto SPOC assignment implemented"
+    },
+    {
+      "id": "TC-014",
+      "name": "Role-based access control",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "Decorator: True, Role check: True"
+    },
+    {
+      "id": "TC-015",
+      "name": "Stepper in detail page",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "Stepper implemented"
+    },
+    {
+      "id": "TC-016",
+      "name": "Kanban all columns",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "All status columns rendered"
+    },
+    {
+      "id": "TC-017",
+      "name": "CGI approve/reject buttons",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "Approve: True, Reject: True"
+    },
+    {
+      "id": "TC-018",
+      "name": "CSV import form",
+      "module": "Code",
+      "status": "PASS",
+      "notes": "CSV import form present"
+    },
+    {
+      "id": "TC-019",
+      "name": "Flask app imports",
+      "module": "Flask",
+      "status": "PASS",
+      "notes": "App imports successfully"
+    },
+    {
+      "id": "TC-020",
+      "name": "Routes registered",
+      "module": "Flask",
+      "status": "PASS",
+      "notes": "Routes: 4/4"
+    },
+    {
+      "id": "TC-021",
+      "name": "Document upload feature",
+      "module": "Feature",
+      "status": "PASS",
+      "notes": "Document uploaded, saved, and recorded successfully."
+    },
+    {
+      "id": "TC-022",
+      "name": "Priority scoring logic",
+      "module": "Feature",
+      "status": "PASS",
+      "notes": "Priority scoring logic is working correctly."
+    }
+  ]
+}
