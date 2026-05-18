@@ -1140,6 +1140,15 @@ def date_filter(value):
     except:
         return value
 
+@app.route('/temp-save-settings')
+def temp_save_settings():
+    save_setting('smtp_server', 'smtp.gmail.com')
+    save_setting('smtp_port', '587')
+    save_setting('smtp_username', 'yaseen.patan.cgi@gmail.com')
+    save_setting('smtp_password', 'YOUR_APP_PASSWORD') # Replace with your app password
+    save_setting('smtp_sender_name', 'Innovation Engine')
+    return "Settings saved."
+
 # ============================================
 # Main
 # ============================================
