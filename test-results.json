@@ -4,7 +4,7 @@
     "passed": 23,
     "failed": 0,
     "pass_rate": 100.0,
-    "timestamp": "2026-05-18T19:39:51.470066"
+    "timestamp": "2026-05-18T20:01:03.919543"
   },
   "tests": [
     {
@@ -19,7 +19,7 @@
       "name": "Required tables created",
       "module": "Database",
       "status": "PASS",
-      "notes": "Tables: ['users', 'sqlite_sequence', 'spoc_mapping', 'ideas', 'settings']"
+      "notes": "Tables: ['users', 'sqlite_sequence', 'spoc_mapping', 'settings', 'ideas']"
     },
     {
       "id": "TC-003",
@@ -40,7 +40,7 @@
       "name": "Sample ideas seeded",
       "module": "Database",
       "status": "PASS",
-      "notes": "Ideas: 9, Statuses: 7"
+      "notes": "Ideas: 8, Statuses: 7"
     },
     {
       "id": "TC-006",
@@ -54,7 +54,7 @@
       "name": "Ideas have SPOC assigned",
       "module": "Database",
       "status": "PASS",
-      "notes": "9/9 have SPOC"
+      "notes": "8/8 have SPOC"
     },
     {
       "id": "TC-008",

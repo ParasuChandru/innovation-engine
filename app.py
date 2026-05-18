@@ -11,6 +11,8 @@ import sqlite3
 import os
 import uuid
 import requests
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 
 app = Flask(__name__)
@@ -340,6 +342,53 @@ def update_idea_jira_link(idea_id, jira_link):
     conn.close()
 
 # ============================================
+# Email Notifications
+# ============================================
+
+def send_status_update_email(idea, new_status):
+    """Sends an email notification to the idea submitter about a status change."""
+    settings = get_settings()
+    smtp_server = settings.get('smtp_server')
+    smtp_port = settings.get('smtp_port')
+    smtp_username = settings.get('smtp_username')
+    smtp_password = settings.get('smtp_password')
+    smtp_sender_name = settings.get('smtp_sender_name', 'Innovation Engine')
+
+    if not all([smtp_server, smtp_port, smtp_username, smtp_password]):
+        print(f"SMTP settings not configured. Skipping email for idea {idea['id']}.")
+        return
+
+    try:
+        subject = f"Update on your idea: {idea['title']}"
+        body = f"""
+        Hello {idea['submitter_name']},
+
+        Your innovation idea, "{idea['title']}", has been moved to a new stage: {new_status}.
+
+        You can view the latest updates here:
+        {url_for('idea_detail', idea_id=idea['id'], _external=True)}
+
+        Thank you,
+        The Innovation Engine Team
+        """
+
+        msg = MIMEText(body)
+        msg['Subject'] = subject
+        msg['From'] = f"{smtp_sender_name} <{smtp_username}>"
+        msg['To'] = idea['submitter_email']
+
+        with smtplib.SMTP(smtp_server, int(smtp_port)) as server:
+            server.starttls()
+            server.login(smtp_username, smtp_password)
+            server.sendmail(smtp_username, [idea['submitter_email']], msg.as_string())
+            print(f"Successfully sent email for idea {idea['id']} to {idea['submitter_email']}")
+
+    except Exception as e:
+        # Fail silently as requested
+        print(f"ERROR: Failed to send email for idea {idea['id']}. Reason: {e}")
+
+
+# ============================================
 # Jira Integration
 # ============================================
 
@@ -643,6 +692,9 @@ def update_status(idea_id):
     if can_update:
         update_idea_status(idea_id, new_status)
         flash(f'Status updated to: {new_status}', 'success')
+        # Send email notification
+        updated_idea = get_idea_by_id(idea_id)
+        send_status_update_email(updated_idea, new_status)
     else:
         flash('Not authorized to update status', 'error')
     
@@ -965,54 +1017,32 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-@app.route('/settings', methods=['GET'])
+@app.route('/settings', methods=['GET', 'POST'])
 @login_required
 @admin_required
 def settings():
+    if request.method == 'POST':
+        # Sanitize Jira domain
+        jira_domain = request.form.get('jira_domain', '').replace('https://', '').rstrip('/')
+        save_setting('jira_domain', jira_domain)
+        
+        # Save other Jira settings
+        save_setting('jira_email', request.form.get('jira_email', ''))
+        save_setting('jira_api_token', request.form.get('jira_api_token', ''))
+        save_setting('jira_project_key', request.form.get('jira_project_key', ''))
+
+        # Save SMTP settings
+        save_setting('smtp_server', request.form.get('smtp_server', ''))
+        save_setting('smtp_port', request.form.get('smtp_port', ''))
+        save_setting('smtp_username', request.form.get('smtp_username', ''))
+        save_setting('smtp_password', request.form.get('smtp_password', ''))
+        save_setting('smtp_sender_name', request.form.get('smtp_sender_name', ''))
+
+        flash('Settings saved successfully!', 'success')
+        return redirect(url_for('settings'))
+
     settings = get_settings()
     return render_template('settings.html', settings=settings)
-
-@app.route('/settings/jira/test', methods=['POST'])
-@login_required
-@admin_required
-def test_jira_connection():
-    data = request.json
-    jira_domain = data.get('jira_domain', '').replace('https://', '').replace('/', '')
-    jira_email = data.get('jira_email')
-    jira_api_token = data.get('jira_api_token')
-
-    if not all([jira_domain, jira_email, jira_api_token]):
-        return jsonify({'success': False, 'message': 'Missing required fields.'}), 400
-
-    # Test credentials by trying to fetch server info
-    url = f"https://{jira_domain}/rest/api/2/serverInfo"
-    auth = (jira_email, jira_api_token)
-    try:
-        response = requests.get(url, auth=auth, timeout=5)
-        response.raise_for_status()
-
-        # If successful, save the credentials
-        save_setting('jira_domain', jira_domain)
-        save_setting('jira_email', jira_email)
-        save_setting('jira_api_token', jira_api_token)
-        save_setting('jira_project_key', data.get('jira_project_key', ''))
-
-        return jsonify({'success': True, 'message': 'Jira connection successful!'})
-    except requests.exceptions.HTTPError as e:
-        return jsonify({'success': False, 'message': f'Connection failed: {e.response.status_code} {e.response.reason}'}), 400
-    except requests.exceptions.RequestException as e:
-        return jsonify({'success': False, 'message': f'Connection failed: {e}'}), 400
-
-@app.route('/settings/jira/disconnect', methods=['POST'])
-@login_required
-@admin_required
-def disconnect_jira():
-    save_setting('jira_domain', '')
-    save_setting('jira_email', '')
-    save_setting('jira_api_token', '')
-    save_setting('jira_project_key', '')
-    flash('Jira connection has been disconnected.', 'success')
-    return redirect(url_for('settings'))
 
 # ============================================
 # Business Logic
