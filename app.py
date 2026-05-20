@@ -1104,6 +1104,18 @@ def settings():
     settings = get_settings()
     return render_template('settings.html', settings=settings)
 
+@app.route('/disconnect-jira')
+@login_required
+@admin_required
+def disconnect_jira():
+    """Clear all Jira-related settings."""
+    save_setting('jira_domain', '')
+    save_setting('jira_email', '')
+    save_setting('jira_api_token', '')
+    save_setting('jira_project_key', '')
+    flash('Jira integration has been disconnected.', 'success')
+    return redirect(url_for('settings'))
+
 @app.route('/api/jira/projects')
 @login_required
 @admin_required
