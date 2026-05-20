@@ -14,12 +14,20 @@ import requests
 import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime
+from encryption import encrypt_data, decrypt_data
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'innovation-engine-secret-key-change-in-production')
+app.secret_key = os.environ.get('SECRET_KEY')
+
+if not app.secret_key:
+    raise ValueError("FATAL: SECRET_KEY not found in environment variables. Please set it in your .env file.")
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'doc', 'docx', 'xlsx', 'ppt', 'pptx'}
 CORS(app)
+
+# Hardcoded SMTP settings
+SMTP_SERVER = "smtprelay.cgi.com"
+SMTP_PORT = 587
 
 def allowed_file(filename):
     """Check if the file extension is allowed."""
@@ -346,42 +354,67 @@ def update_idea_jira_link(idea_id, jira_link):
 # ============================================
 
 def send_status_update_email(idea, new_status):
-    """Sends an email notification to the idea submitter about a status change."""
-    settings = get_settings()
-    smtp_server = settings.get('smtp_server')
-    smtp_port = settings.get('smtp_port')
+    """Sends a customized email notification for an idea status change."""
+    settings = get_settings()    
     smtp_username = settings.get('smtp_username')
-    smtp_password = settings.get('smtp_password')
+    smtp_password_encrypted = settings.get('smtp_password')
     smtp_sender_name = settings.get('smtp_sender_name', 'Innovation Engine')
-
-    if not all([smtp_server, smtp_port, smtp_username, smtp_password]):
+    if not all([smtp_username, smtp_password_encrypted]):
         print(f"SMTP settings not configured. Skipping email for idea {idea['id']}.")
         return
 
+    # Build recipient list
+    recipients = {idea['submitter_email']}
+    
+    spoc_emails_str = settings.get('spoc_notification_emails', '')
+    if spoc_emails_str:
+        recipients.update([email.strip() for email in spoc_emails_str.split(',') if email.strip()])
+
+    if new_status == 'Waiting for CGI approval':
+        cgi_emails_str = settings.get('cgi_approval_notification_emails', '')
+        if cgi_emails_str:
+            recipients.update([email.strip() for email in cgi_emails_str.split(',') if email.strip()])
+
+    # Remove any empty strings that might result from splitting
+    recipients.discard('')
+    
+    recipient_list = list(recipients)
+    if not recipient_list:
+        print(f"No recipients found for idea {idea['id']} status update.")
+        return
+
+    smtp_password = decrypt_data(smtp_password_encrypted)
     try:
-        subject = f"Update on your idea: {idea['title']}"
-        body = f"""
-        Hello {idea['submitter_name']},
+        subject = f"Innovation Idea Update: '{idea['title']}' is now {new_status}"
+        body = f"""Hello Team,
 
-        Your innovation idea, "{idea['title']}", has been moved to a new stage: {new_status}.
+An update has occurred for the innovation idea: "{idea['title']}".
 
-        You can view the latest updates here:
-        {url_for('idea_detail', idea_id=idea['id'], _external=True)}
+Details:
+- Idea Title: {idea['title']}
+- New Status: {new_status}
+- Submitter: {idea['submitter_name']}
+- Category: {idea['category']}
 
-        Thank you,
-        The Innovation Engine Team
-        """
+You can view the latest updates here:
+{url_for('idea_detail', idea_id=idea['id'], _external=True)}
+
+Thank you,
+The Innovation Engine Team
+"""
 
         msg = MIMEText(body)
         msg['Subject'] = subject
         msg['From'] = f"{smtp_sender_name} <{smtp_username}>"
-        msg['To'] = idea['submitter_email']
+        msg['To'] = ", ".join(recipient_list)
 
-        with smtplib.SMTP(smtp_server, int(smtp_port)) as server:
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=30) as server:
+            server.ehlo()
             server.starttls()
+            server.ehlo()
             server.login(smtp_username, smtp_password)
-            server.sendmail(smtp_username, [idea['submitter_email']], msg.as_string())
-            print(f"Successfully sent email for idea {idea['id']} to {idea['submitter_email']}")
+            server.sendmail(smtp_username, recipient_list, msg.as_string())
+            print(f"Successfully sent status update email for idea {idea['id']} to: {', '.join(recipient_list)}")
 
     except Exception as e:
         # Fail silently as requested
@@ -396,15 +429,15 @@ def create_jira_ticket(idea):
     """Creates a Jira ticket for an idea."""
     settings = get_settings()
     jira_domain = settings.get('jira_domain')
-    jira_email = settings.get('jira_email')
-    jira_api_token = settings.get('jira_api_token')
+    jira_email = settings.get('jira_email')   
+    jira_api_token_encrypted = settings.get('jira_api_token')
     jira_project_key = settings.get('jira_project_key')
 
-    if not all([jira_domain, jira_email, jira_api_token, jira_project_key]):
+    if not all([jira_domain, jira_email, jira_api_token_encrypted, jira_project_key]):
         return None, "Jira settings are not configured."
 
     url = f"https://{jira_domain}/rest/api/2/issue"
-    auth = (jira_email, jira_api_token)
+    
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
@@ -423,6 +456,13 @@ def create_jira_ticket(idea):
     }
 
     try:
+        jira_api_token = decrypt_data(jira_api_token_encrypted)
+    except Exception:
+        # Fallback in case the database still holds a plain-text token
+        jira_api_token = jira_api_token_encrypted
+        
+    auth = (jira_email, jira_api_token)
+    try:
         response = requests.post(url, json=payload, headers=headers, auth=auth)
         response.raise_for_status()
         ticket_data = response.json()
@@ -430,7 +470,13 @@ def create_jira_ticket(idea):
         ticket_url = f"https://{jira_domain}/browse/{ticket_key}"
         return ticket_url, None
     except requests.exceptions.RequestException as e:
-        return None, f"Failed to create Jira ticket: {e}"
+        error_details = str(e)
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_details = e.response.json()
+            except Exception:
+                error_details = e.response.text
+        return None, f"Jira rejected the request: {error_details}"
 
 # ============================================
 # Authentication Decorator
@@ -717,8 +763,10 @@ def create_jira_ticket_route(idea_id):
     ticket_url, error = create_jira_ticket(idea)
 
     if error:
+        print(f"JIRA TICKET ERROR: {error}")
         flash(f'Error creating Jira ticket: {error}', 'error')
     else:
+        print(f"JIRA TICKET SUCCESS: {ticket_url}")
         update_idea_jira_link(idea_id, ticket_url)
         flash(f'Successfully created Jira ticket: {ticket_url}', 'success')
 
@@ -1025,24 +1073,62 @@ def settings():
         # Sanitize Jira domain
         jira_domain = request.form.get('jira_domain', '').replace('https://', '').rstrip('/')
         save_setting('jira_domain', jira_domain)
-        
+
         # Save other Jira settings
         save_setting('jira_email', request.form.get('jira_email', ''))
-        save_setting('jira_api_token', request.form.get('jira_api_token', ''))
+        
+        # Encrypt and save Jira API token if a new one is provided
+        new_jira_token = request.form.get('jira_api_token')
+        if new_jira_token:
+            save_setting('jira_api_token', encrypt_data(new_jira_token))
+
         save_setting('jira_project_key', request.form.get('jira_project_key', ''))
 
         # Save SMTP settings
-        save_setting('smtp_server', request.form.get('smtp_server', ''))
-        save_setting('smtp_port', request.form.get('smtp_port', ''))
         save_setting('smtp_username', request.form.get('smtp_username', ''))
-        save_setting('smtp_password', request.form.get('smtp_password', ''))
+        
+        # Encrypt and save SMTP password if a new one is provided
+        new_smtp_password = request.form.get('smtp_password')
+        if new_smtp_password:
+            save_setting('smtp_password', encrypt_data(new_smtp_password))
+
         save_setting('smtp_sender_name', request.form.get('smtp_sender_name', ''))
+        
+        # Save new email notification lists
+        save_setting('spoc_notification_emails', request.form.get('spoc_notification_emails', ''))
+        save_setting('cgi_approval_notification_emails', request.form.get('cgi_approval_notification_emails', ''))
 
         flash('Settings saved successfully!', 'success')
         return redirect(url_for('settings'))
 
     settings = get_settings()
     return render_template('settings.html', settings=settings)
+
+@app.route('/api/jira/projects')
+@login_required
+@admin_required
+def api_jira_projects():
+    """Fetch available Jira projects using saved credentials."""
+    settings = get_settings()
+    jira_domain = settings.get('jira_domain')
+    jira_email = settings.get('jira_email')
+    jira_api_token_encrypted = settings.get('jira_api_token')
+
+    if not all([jira_domain, jira_email, jira_api_token_encrypted]):
+        return jsonify({'error': 'Please save your Jira domain, email, and API token first.'}), 400
+
+    try:
+        jira_api_token = decrypt_data(jira_api_token_encrypted)
+    except Exception:
+        jira_api_token = jira_api_token_encrypted
+
+    url = f"https://{jira_domain}/rest/api/2/project"
+    try:
+        response = requests.get(url, auth=(jira_email, jira_api_token), timeout=10)
+        response.raise_for_status()
+        return jsonify({'projects': [{'key': p['key'], 'name': p['name']} for p in response.json()]})
+    except Exception as e:
+        return jsonify({'error': 'Failed to fetch projects. Please check your Jira credentials.'}), 500
 
 # ============================================
 # Business Logic
@@ -1140,14 +1226,6 @@ def date_filter(value):
     except:
         return value
 
-@app.route('/temp-save-settings')
-def temp_save_settings():
-    save_setting('smtp_server', 'smtp.gmail.com')
-    save_setting('smtp_port', '587')
-    save_setting('smtp_username', 'yaseen.patan.cgi@gmail.com')
-    save_setting('smtp_password', 'YOUR_APP_PASSWORD') # Replace with your app password
-    save_setting('smtp_sender_name', 'Innovation Engine')
-    return "Settings saved."
 
 # ============================================
 # Main
