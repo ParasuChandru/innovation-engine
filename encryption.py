@@ -1,21 +1,39 @@
-import base64
+import os
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
 
-# This is a placeholder for a real encryption service.
-# For the purpose of this test, we use simple base64 encoding,
-# as the actual encryption logic is not relevant to the UI test.
+# Load environment variables from .env file
+load_dotenv()
+
+def load_key():
+    """
+    Loads the encryption key from the ENCRYPTION_KEY environment variable.
+    The application will fail to start if the key is not found.
+    """
+    key = os.getenv("ENCRYPTION_KEY")
+    if not key:
+        raise ValueError("FATAL: ENCRYPTION_KEY not found in environment variables. "
+                         "Please generate a key and add it to your .env file.")
+    return key.encode()
+
+# Load the key and initialize the cipher suite at import time.
+# If the key is missing, the app will crash on startup, which is the desired behavior.
+try:
+    key = load_key()
+    cipher_suite = Fernet(key)
+except ValueError as e:
+    print(e)
+    # Exit to prevent the app from running in a broken state.
+    exit(1)
 
 def encrypt_data(data: str) -> str:
-    """Encodes string data using base64."""
-    if not isinstance(data, str):
+    """Encrypts a string, returning an empty string if input is empty."""
+    if not data:
         return ""
-    return base64.b64encode(data.encode('utf-8')).decode('utf-8')
+    return cipher_suite.encrypt(data.encode()).decode()
 
-def decrypt_data(data: str) -> str:
-    """Decodes string data using base64."""
-    if not isinstance(data, str):
+def decrypt_data(encrypted_data: str) -> str:
+    """Decrypts a string, returning an empty string if input is empty."""
+    if not encrypted_data:
         return ""
-    try:
-        return base64.b64decode(data.encode('utf-8')).decode('utf-8')
-    except (ValueError, TypeError):
-        # Return original data if it's not valid base64
-        return data
+    return cipher_suite.decrypt(encrypted_data.encode()).decode()
