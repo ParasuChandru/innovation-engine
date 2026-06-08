@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Business Case — {{ idea.title }} - Innovation Engine{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-6">
+    <!-- Back Link -->
+    <div class="flex items-center justify-between">
+        <a href="{{ url_for('idea_detail', idea_id=idea.id) }}" class="inline-flex items-center text-gray-600 hover:text-gray-900">
+            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Idea
+        </a>
+        <div class="flex gap-3">
+            <a href="{{ url_for('business_case_pdf', idea_id=idea.id) }}"
+               class="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Download PDF
+            </a>
+            {% if editable %}
+            <button onclick="document.getElementById('bc-form').requestSubmit()"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors shadow">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save All Changes
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Header Card -->
+    <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-lg p-6 text-white">
+        <h1 class="text-2xl font-bold">{{ idea.title }}</h1>
+        <p class="text-blue-100 mt-1">{{ idea.category }} — {{ idea.sub_category }}</p>
+        <div class="flex gap-3 mt-3">
+            {% if bc_data.get('business_case_last_updated') %}
+            <span class="text-xs bg-white/20 px-3 py-1 rounded-full">Last updated: {{ bc_data.business_case_last_updated }}</span>
+            {% endif %}
+            {% if editable %}
+            <span class="text-xs bg-green-500/30 px-3 py-1 rounded-full">Editing mode</span>
+            {% else %}
+            <span class="text-xs bg-amber-500/30 px-3 py-1 rounded-full">Read-only</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Live Financial Calculator -->
+    <div class="bg-white rounded-xl shadow p-6">
+        <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            Live Financial Calculator
+        </h3>
+        <div id="bc-calculator" class="space-y-4">
+            <div class="grid md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Estimated Cost ($)</label>
+                    <input type="number" id="calc-cost" value="{{ idea.get('est_cost_time', '').split(',')[0].replace('$', '').replace(',', '').strip() or 80000 }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           onchange="updateCalculator()">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Annual Benefit ($)</label>
+                    <input type="number" id="calc-benefit" value="{{ idea.proj_savings or 0 }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           onchange="updateCalculator()">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Hours Saved / Year</label>
+                    <input type="number" id="calc-hours" value="{{ idea.hours_saved or 0 }}"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 pt-2" id="calc-results">
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">Net Annual</div>
+                    <div class="text-lg font-bold text-green-600" id="res-net">-</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">ROI</div>
+                    <div class="text-lg font-bold text-blue-600" id="res-roi">-</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">Payback</div>
+                    <div class="text-lg font-bold text-indigo-600" id="res-payback">-</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">3-Year Net</div>
+                    <div class="text-lg font-bold text-green-600" id="res-3yr">-</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">Benefit/Cost</div>
+                    <div class="text-lg font-bold text-purple-600" id="res-bcr">-</div>
+                </div>
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-gray-500">Hrs Saved/yr</div>
+                    <div class="text-lg font-bold text-gray-600" id="res-hrs">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Form -->
+    <form id="bc-form" method="POST" action="{{ url_for('business_case_save', idea_id=idea.id) }}" class="space-y-6">
+        <!-- Executive Summary -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">1</span>
+                Executive Summary
+            </h3>
+            <textarea name="executive_summary" rows="4"
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Summarize the idea, the problem it solves, and why it deserves investment..."
+                      {% if not editable %}disabled{% endif %}>{{ bc_data.get('executive_summary', '') }}</textarea>
+        </div>
+
+        <!-- Problem Statement -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">2</span>
+                Problem Statement
+            </h3>
+            <p class="text-gray-700 whitespace-pre-wrap">{{ idea.problem_statement }}</p>
+        </div>
+
+        <!-- Proposed Solution -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">3</span>
+                Proposed Solution
+            </h3>
+            <p class="text-gray-700 whitespace-pre-wrap">{{ idea.proposed_solution }}</p>
+        </div>
+
+        <!-- Benefit Type -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">4</span>
+                Benefit Type
+            </h3>
+            <div id="benefit-pills" class="flex flex-wrap gap-2">
+                {% set selected_bc = bc_data.get('benefit_type', '') %}
+                {% for bt in ['Cost Reduction', 'Revenue Growth', 'Risk Mitigation', 'Compliance', 'Customer Experience', 'Employee Productivity', 'Operational Efficiency', 'Innovation & R&D'] %}
+                <button type="button"
+                        data-value="{{ bt }}"
+                        class="px-4 py-2 rounded-full text-sm font-medium border-2 transition-all
+                            {% if selected_bc == bt %}
+                                bg-blue-600 text-white border-blue-600 shadow-md
+                            {% elif selected_bc %}
+                                bg-gray-50 text-gray-500 border-gray-300 hover:border-blue-400
+                            {% else %}
+                                bg-gray-50 text-gray-600 border-gray-300 hover:border-blue-400 hover:bg-blue-50
+                            {% endif %}"
+                        {% if not editable %}disabled{% endif %}>
+                    {{ bt }}
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="benefit_type" id="benefit-type-input" value="{{ selected_bc }}">
+        </div>
+
+        <!-- Milestones -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">5</span>
+                Milestones
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">Define up to 4 key milestones for the initiative.</p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Milestone 1</label>
+                    <input type="text" name="milestone_1"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           placeholder="e.g., Requirements gathered by Week 4"
+                           value="{{ bc_data.get('milestone_1', '') }}">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Milestone 2</label>
+                    <input type="text" name="milestone_2"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           placeholder="e.g., Prototype deployed by Month 2"
+                           value="{{ bc_data.get('milestone_2', '') }}">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Milestone 3</label>
+                    <input type="text" name="milestone_3"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           placeholder="e.g., Full rollout by Month 4"
+                           value="{{ bc_data.get('milestone_3', '') }}">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Milestone 4</label>
+                    <input type="text" name="milestone_4"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           {% if not editable %}disabled{% endif %}
+                           placeholder="e.g., Post-implementation review by Month 5"
+                           value="{{ bc_data.get('milestone_4', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <!-- Risks & Mitigation -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">6</span>
+                Risks &amp; Mitigation
+            </h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Identified Risks</label>
+                    <textarea name="risk_assessment" rows="5"
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                              {% if not editable %}disabled{% endif %}
+                              placeholder="e.g., Vendor delays, budget overrun, technical feasibility...">{{ bc_data.get('risk_assessment', '') }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mitigation Strategy</label>
+                    <textarea name="mitigation_strategy" rows="5"
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                              {% if not editable %}disabled{% endif %}
+                              placeholder="e.g., Dual-vendor strategy, 10% contingency budget...">{{ bc_data.get('mitigation_strategy', '') }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">7</span>
+                Key Performance Indicators (KPIs)
+            </h3>
+            <textarea name="kpis" rows="4"
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                      {% if not editable %}disabled{% endif %}
+                      placeholder="e.g., 1. Fuel cost reduction by 12% within 6 months&#10;2. On-time delivery rate > 95%&#10;3. Incident rate < 0.5 per 100k miles">{{ bc_data.get('kpis', '') }}</textarea>
+        </div>
+
+        <!-- Stakeholders -->
+        <div class="bg-white rounded-xl shadow p-6">
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2">
+                <span class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold">8</span>
+                Stakeholders
+            </h3>
+            <textarea name="stakeholders" rows="3"
+                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                      {% if not editable %}disabled{% endif %}
+                      placeholder="e.g., Fleet Operations Director, IT Integration Lead, CFO, Vendor PM">{{ bc_data.get('stakeholders', '') }}</textarea>
+        </div>
+
+        <!-- Action Bar -->
+        {% if editable %}
+        <div class="flex items-center justify-between bg-gray-50 rounded-xl p-4">
+            <p class="text-sm text-gray-500">All fields are required before advancing to CGI approval.</p>
+            <div class="flex gap-3">
+                <a href="{{ url_for('idea_detail', idea_id=idea.id) }}"
+                   class="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="px-6 py-2.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors inline-flex items-center shadow">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Business Case
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+// Benefit pill selection
+document.addEventListener('DOMContentLoaded', function() {
+    const pills = document.querySelectorAll('#benefit-pills button');
+    const input = document.getElementById('benefit-type-input');
+    
+    pills.forEach(function(pill) {
+        pill.addEventListener('click', function() {
+            if (this.disabled) return;
+            pills.forEach(function(p) {
+                p.className = 'px-4 py-2 rounded-full text-sm font-medium border-2 bg-gray-50 text-gray-500 border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all';
+            });
+            this.className = 'px-4 py-2 rounded-full text-sm font-medium border-2 bg-blue-600 text-white border-blue-600 shadow-md transition-all';
+            input.value = this.dataset.value;
+        });
+    });
+});
+
+// Live financial calculator
+function updateCalculator() {
+    var cost = parseFloat(document.getElementById('calc-cost').value) || 0;
+    var benefit = parseFloat(document.getElementById('calc-benefit').value) || 0;
+    var hours = parseFloat(document.getElementById('calc-hours').value) || 0;
+    
+    var netAnnual = benefit - cost;
+    var roi = cost > 0 ? ((benefit - cost) / cost * 100) : 0;
+    var paybackMonths = benefit > 0 ? (cost / (benefit / 12)) : 0;
+    var threeYearNet = (benefit * 3) - cost;
+    var bcr = cost > 0 ? (benefit / cost) : 0;
+    
+    var fmt = function(v, decimals) {
+        if (decimals === undefined) decimals = 0;
+        return '$' + v.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+    };
+    
+    document.getElementById('res-net').textContent = netAnnual >= 0 ? '+' + fmt(netAnnual, 0) : fmt(netAnnual, 0);
+    document.getElementById('res-net').className = 'text-lg font-bold ' + (netAnnual >= 0 ? 'text-green-600' : 'text-red-600');
+    document.getElementById('res-roi').textContent = roi.toFixed(1) + '%';
+    document.getElementById('res-roi').className = 'text-lg font-bold ' + (roi >= 0 ? 'text-blue-600' : 'text-red-600');
+    document.getElementById('res-payback').textContent = paybackMonths.toFixed(1) + ' mo';
+    document.getElementById('res-3yr').textContent = fmt(threeYearNet, 0);
+    document.getElementById('res-3yr').className = 'text-lg font-bold ' + (threeYearNet >= 0 ? 'text-green-600' : 'text-red-600');
+    document.getElementById('res-bcr').textContent = bcr.toFixed(2) + 'x';
+    document.getElementById('res-hrs').textContent = hours.toLocaleString();
+}
+
+// Run on load
+updateCalculator();
+</script>
+{% endblock %}

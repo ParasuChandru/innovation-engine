@@ -27,3 +27,6 @@ pytest-cov==5.0.0
 # Utilities
 python-dateutil==2.9.0
 requests==2.31.0
+cryptography
+reportlab==4.2.5
+pypdf==5.1.0

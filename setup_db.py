@@ -137,7 +137,29 @@ def migrate_database():
     if 'jira_ticket_link' not in columns:
         print('Adding jira_ticket_link column...')
         cursor.execute('ALTER TABLE ideas ADD COLUMN jira_ticket_link TEXT')
-    
+
+    if 'confidence' not in columns:
+        print('Adding confidence column...')
+        cursor.execute("ALTER TABLE ideas ADD COLUMN confidence TEXT CHECK(confidence IN ('High', 'Medium', 'Low')) DEFAULT 'Medium'")
+
+    bc_fields = [
+        ('executive_summary', 'TEXT'),
+        ('benefit_type', 'TEXT'),
+        ('milestone_1', 'TEXT'),
+        ('milestone_2', 'TEXT'),
+        ('milestone_3', 'TEXT'),
+        ('milestone_4', 'TEXT'),
+        ('risk_assessment', 'TEXT'),
+        ('mitigation_strategy', 'TEXT'),
+        ('kpis', 'TEXT'),
+        ('stakeholders', 'TEXT'),
+        ('business_case_last_updated', 'TIMESTAMP'),
+    ]
+    for col_name, col_type in bc_fields:
+        if col_name not in columns:
+            print(f'Adding business case column: {col_name}...')
+            cursor.execute(f'ALTER TABLE ideas ADD COLUMN {col_name} {col_type}')
+
     conn.commit()
     conn.close()
     print('✅ Database migration complete!')
@@ -201,87 +223,114 @@ def seed_database():
     
     print(f'✅ Inserted {len(spoc_mappings)} SPOC mappings')
     
-    # Insert sample ideas (now with hours_saved and savings_measurement)
+    # Insert sample ideas (with hours_saved, savings_measurement, and confidence)
     ideas = [
-        ('Automated Report Generation', user_ids['john.smith@company.com'], 
+        ('Automated Report Generation', user_ids['john.smith@company.com'],
          user_ids['sarah.johnson@company.com'], 'Open', 'Production Services', 'Reporting',
          'Manual report generation takes 4 hours daily',
          'Implement automated reporting using Python scripts and scheduled tasks',
          'IT team support for server access', '25 analysts',
          'High - reduces manual effort significantly', 'Medium',
-         'Python, Power BI', '2 months, $5000', 50000, 80, 'Time tracking before/after automation'),
-        
+         'Python, Power BI', '2 months, $5000', 50000, 80, 'Time tracking before/after automation', 'Medium'),
+
         ('Customer Feedback AI Analysis', user_ids['anna.garcia@company.com'],
          user_ids['james.wilson@company.com'], 'Waiting for CGI approval', 'Customer Experience', 'Analytics',
          'Cannot analyze large volumes of customer feedback efficiently',
          'Deploy NLP-based sentiment analysis tool',
          'Data Science team, Cloud infrastructure', 'Customer Service team (40 people)',
          'High - improves customer satisfaction metrics', 'High',
-         'Python, TensorFlow, AWS', '4 months, $25000', 120000, 160, 'Customer satisfaction score improvement'),
-        
+         'Python, TensorFlow, AWS', '4 months, $25000', 120000, 160, 'Customer satisfaction score improvement', 'High'),
+
         ('Invoice Processing Automation', user_ids['tom.harris@company.com'],
          user_ids['sarah.johnson@company.com'], 'Waiting for CGI approval', 'Finance & Accounting', 'AP Automation',
          'Manual invoice processing leads to errors and delays',
          'OCR-based invoice scanning and auto-matching system',
          'Finance team validation, IT integration support', 'Finance department (15 people)',
          'Medium - reduces processing time by 60%', 'Medium',
-         'UiPath, SAP integration', '3 months, $15000', 75000, 120, 'Processing time reduction and error rate'),
-        
+         'UiPath, SAP integration', '3 months, $15000', 75000, 120, 'Processing time reduction and error rate', 'Medium'),
+
         ('Employee Onboarding Portal', user_ids['nancy.white@company.com'],
          user_ids['mike.chen@company.com'], 'Waiting for LT approval', 'Human Resources', 'Employee Experience',
          'Onboarding process is fragmented across multiple systems',
          'Unified self-service onboarding portal with document management',
          'HR team, IT security review', '500+ new hires annually',
          'Medium - improves new hire experience', 'Medium',
-         'React, Node.js, SharePoint', '4 months, $30000', 45000, 40, 'Onboarding completion time and satisfaction surveys'),
-        
+         'React, Node.js, SharePoint', '4 months, $30000', 45000, 40, 'Onboarding completion time and satisfaction surveys', 'Medium'),
+
         ('Inventory Tracking IoT System', user_ids['john.smith@company.com'],
          user_ids['emily.davis@company.com'], 'Ready for implementation', 'Supply Chain', 'Inventory Management',
          'Cannot track real-time inventory levels accurately',
          'IoT sensors with real-time dashboard',
          'Operations team, IoT vendor', 'Warehouse team (30 people)',
          'High - prevents stockouts and overstock', 'High',
-         'IoT sensors, Azure IoT Hub, Power BI', '6 months, $50000', 200000, 200, 'Inventory accuracy and stockout incidents'),
-        
+         'IoT sensors, Azure IoT Hub, Power BI', '6 months, $50000', 200000, 200, 'Inventory accuracy and stockout incidents', 'High'),
+
         ('Marketing Campaign Analytics', user_ids['anna.garcia@company.com'],
          user_ids['james.wilson@company.com'], 'Implementation in progress', 'Marketing', 'Analytics',
          'Difficult to measure ROI across marketing channels',
          'Unified analytics dashboard with attribution modeling',
          'Marketing team, Data team', 'Marketing team (20 people)',
          'High - optimizes marketing spend', 'Medium',
-         'Google Analytics, Tableau, Python', '3 months, $20000', 80000, 60, 'Marketing ROI and attribution accuracy'),
-        
+         'Google Analytics, Tableau, Python', '3 months, $20000', 80000, 60, 'Marketing ROI and attribution accuracy', 'Medium'),
+
         ('Server Monitoring Automation', user_ids['tom.harris@company.com'],
          user_ids['emily.davis@company.com'], 'Deploy and Done', 'IT Infrastructure', 'DevOps',
          'Manual server health checks miss critical issues',
          'Automated monitoring with alerting system',
          'IT Ops team', 'IT team (10 people)',
          'High - prevents downtime', 'Low',
-         'Prometheus, Grafana, PagerDuty', '1 month, $5000', 30000, 100, 'Downtime reduction and incident response time'),
-        
+         'Prometheus, Grafana, PagerDuty', '1 month, $5000', 30000, 100, 'Downtime reduction and incident response time', 'Low'),
+
         ('Contract Management System', user_ids['nancy.white@company.com'],
          user_ids['sarah.johnson@company.com'], 'ScoreIT', 'Production Services', 'Legal',
          'Contract renewals often missed, leading to unfavorable terms',
          'Digital contract repository with renewal alerts',
          'Legal team, IT team', 'Legal and Procurement (25 people)',
          'Medium - ensures timely renewals', 'Medium',
-         'DocuSign, SharePoint', '2 months, $10000', 35000, 30, 'Missed renewal rate and negotiation savings'),
+         'DocuSign, SharePoint', '2 months, $10000', 35000, 30, 'Missed renewal rate and negotiation savings', 'Medium'),
+
+        # Business Case Template — fully filled out example
+        ('Fleet Telematics Optimization', user_ids['john.smith@company.com'],
+         user_ids['emily.davis@company.com'], 'Business Case Template', 'Supply Chain', 'Fleet Management',
+         'Our fleet of 200 vehicles wastes an estimated 15% of fuel through idle time, inefficient routing, and lack of real-time monitoring. Annual fuel costs exceed $1.2M with no visibility into driver behavior.',
+         'Deploy IoT telematics devices on all vehicles with a cloud dashboard for real-time monitoring, automated routing, driver scoring, and maintenance alerts. Integrate with existing ERP for unified cost tracking.',
+         'IT for integration, Fleet Ops for rollout, Vendor for device supply', '300+ drivers and fleet managers',
+         'High - direct cost reduction and safety improvement', 'Medium',
+         'IoT sensors, Azure IoT Hub, Power BI, REST APIs', '4 months, $80000', 200000, 2400, 'Fuel cost reduction %, on-time delivery rate, incident rate per 100k miles', 'High'),
     ]
-    
+
     cursor.executemany('''
         INSERT INTO ideas (
             title, submitter_id, spoc_id, status, category, sub_category,
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
-            est_cost_time, proj_savings, hours_saved, savings_measurement
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            est_cost_time, proj_savings, hours_saved, savings_measurement,
+            confidence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', ideas)
-    
+
     print(f'✅ Inserted {len(ideas)} sample ideas')
-    
+
+    # Seed business case data for the Fleet Telematics idea (id 9)
+    cursor.execute('''
+        UPDATE ideas SET
+            executive_summary = 'IoT telematics deployment will reduce fuel costs by 15% through idle-time elimination, route optimization, and driver behavior coaching. Estimated annual savings of $200K against an $80K investment.',
+            benefit_type = 'Cost Reduction',
+            milestone_1 = 'Vendor selection and contract signed by Week 6',
+            milestone_2 = 'Pilot devices installed on 50 vehicles by Month 2',
+            milestone_3 = 'Full fleet deployment and ERP integration by Month 4',
+            milestone_4 = 'Post-implementation review and KPI baseline by Month 5',
+            risk_assessment = 'Vendor delivery delays; data integration complexity with legacy ERP; driver pushback on monitoring; upfront hardware cost overrun.',
+            mitigation_strategy = 'Dual-vendor shortlist with SLA penalties; early API spike by IT team; driver engagement workshops; 15% hardware contingency budget.',
+            kpis = '1. Fuel cost reduction >= 12% within 6 months\\n2. On-time delivery rate > 95%\\n3. Idle-time reduction >= 20%\\n4. Incident rate < 0.5 per 100k miles',
+            stakeholders = 'Fleet Operations Director (sponsor), IT Integration Lead (technical), CFO (budget), Vendor PM (delivery), Union Rep (driver concerns)',
+            business_case_last_updated = CURRENT_TIMESTAMP
+        WHERE title = 'Fleet Telematics Optimization'
+    ''')
+
     conn.commit()
     conn.close()
-    
+
     print('')
     print('🎉 Database seeded successfully!')
     print('')

@@ -30,6 +30,10 @@ CORS(app)
 SMTP_SERVER = "smtprelay.cgi.com"
 SMTP_PORT = 587
 
+# Fallback URL settings (so url_for(_external=True) works outside request context)
+app.config.setdefault('SERVER_NAME', 'localhost:5000')
+app.config.setdefault('PREFERRED_URL_SCHEME', 'http')
+
 def allowed_file(filename):
     """Check if the file extension is allowed."""
     return '.' in filename and \
@@ -216,6 +220,52 @@ def get_idea_by_id(idea_id):
     conn.close()
     return dict(idea) if idea else None
 
+def get_business_case(idea_id):
+    """Get business case data for an idea"""
+    conn = get_db()
+    row = conn.execute('''
+        SELECT executive_summary, benefit_type, milestone_1, milestone_2,
+               milestone_3, milestone_4, risk_assessment, mitigation_strategy,
+               kpis, stakeholders, business_case_last_updated
+        FROM ideas WHERE id = ?
+    ''', (idea_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def save_business_case(idea_id, data):
+    """Save business case data to the database"""
+    conn = get_db()
+    conn.execute('''
+        UPDATE ideas SET
+            executive_summary = ?,
+            benefit_type = ?,
+            milestone_1 = ?,
+            milestone_2 = ?,
+            milestone_3 = ?,
+            milestone_4 = ?,
+            risk_assessment = ?,
+            mitigation_strategy = ?,
+            kpis = ?,
+            stakeholders = ?,
+            business_case_last_updated = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (
+        data.get('executive_summary'),
+        data.get('benefit_type'),
+        data.get('milestone_1'),
+        data.get('milestone_2'),
+        data.get('milestone_3'),
+        data.get('milestone_4'),
+        data.get('risk_assessment'),
+        data.get('mitigation_strategy'),
+        data.get('kpis'),
+        data.get('stakeholders'),
+        idea_id
+    ))
+    conn.commit()
+    conn.close()
+    return True
+
 def create_idea(data):
     """Create a new idea"""
     conn = get_db()
@@ -225,8 +275,9 @@ def create_idea(data):
             problem_statement, proposed_solution, support_needed,
             users_impacted, business_impact, complexity, tools_used,
             est_cost_time, proj_savings, hours_saved, savings_measurement,
-            target_completion_date, target_pi, document_filename, document_original_filename
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            target_completion_date, target_pi, confidence,
+            document_filename, document_original_filename
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['title'],
         data['submitter_id'],
@@ -247,6 +298,7 @@ def create_idea(data):
         data.get('savings_measurement'),
         data.get('target_completion_date'),
         data.get('target_pi'),
+        data.get('confidence') or 'Medium',
         data.get('document_filename'),
         data.get('document_original_filename')
     ))
@@ -266,18 +318,30 @@ def update_idea_status(idea_id, new_status):
     conn.commit()
     conn.close()
 
-def update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact):
+def update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact, confidence=None):
     """Update idea benefits fields"""
     conn = get_db()
-    conn.execute('''
-        UPDATE ideas 
-        SET proj_savings = ?, 
-            hours_saved = ?, 
-            savings_measurement = ?, 
-            business_impact = ?,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    ''', (proj_savings, hours_saved, savings_measurement, business_impact, idea_id))
+    if confidence:
+        conn.execute('''
+            UPDATE ideas 
+            SET proj_savings = ?, 
+                hours_saved = ?, 
+                savings_measurement = ?, 
+                business_impact = ?,
+                confidence = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (proj_savings, hours_saved, savings_measurement, business_impact, confidence, idea_id))
+    else:
+        conn.execute('''
+            UPDATE ideas 
+            SET proj_savings = ?, 
+                hours_saved = ?, 
+                savings_measurement = ?, 
+                business_impact = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (proj_savings, hours_saved, savings_measurement, business_impact, idea_id))
     conn.commit()
     conn.close()
 
@@ -384,21 +448,33 @@ def send_status_update_email(idea, new_status):
         print(f"No recipients found for idea {idea['id']} status update.")
         return
 
-    smtp_password = decrypt_data(smtp_password_encrypted)
     try:
-        subject = f"Innovation Idea Update: '{idea['title']}' is now {new_status}"
+        smtp_password = decrypt_data(smtp_password_encrypted)
+    except Exception as e:
+        # Decrypt failed (e.g., corrupted data, key mismatch)
+        print(f"SMTP password decrypt failed for idea {idea.get('id', '?')}. Reason: {e}. Skipping email.")
+        return
+
+    try:
+        # Build detail URL safely (url_for with _external=True requires SERVER_NAME)
+        try:
+            detail_url = url_for('idea_detail', idea_id=idea.get('id'), _external=True)
+        except Exception:
+            detail_url = f"http://localhost:5000/ideas/{idea.get('id')}"
+
+        subject = f"Innovation Idea Update: '{idea.get('title', '?')}' is now {new_status}"
         body = f"""Hello Team,
 
-An update has occurred for the innovation idea: "{idea['title']}".
+An update has occurred for the innovation idea: "{idea.get('title', '?')}".
 
 Details:
-- Idea Title: {idea['title']}
+- Idea Title: {idea.get('title', '?')}
 - New Status: {new_status}
-- Submitter: {idea['submitter_name']}
-- Category: {idea['category']}
+- Submitter: {idea.get('submitter_name', '?')}
+- Category: {idea.get('category', '?')}
 
 You can view the latest updates here:
-{url_for('idea_detail', idea_id=idea['id'], _external=True)}
+{detail_url}
 
 Thank you,
 The Innovation Engine Team
@@ -626,6 +702,7 @@ def new_idea():
             'savings_measurement': request.form.get('savings_measurement'),
             'target_completion_date': request.form.get('target_completion_date') or None,
             'target_pi': request.form.get('target_pi'),
+            'confidence': request.form.get('confidence') or 'Medium',
             'document_filename': document_filename,
             'document_original_filename': document_original_filename
         }
@@ -667,6 +744,14 @@ def idea_detail(idea_id):
     if idea['status'] == 'ScoreIT':
         priority_info = calculate_priority_score(idea)
     
+    # Load business case data if in Business Case Template stage
+    bc_data = None
+    is_bc_stage = idea['status'] == 'Business Case Template'
+    bc_editable = False
+    if is_bc_stage:
+        bc_data = get_business_case(idea_id) or {}
+        bc_editable = can_edit_business_case(user, idea) if user else False
+    
     # Determine next stage for generic advance button
     next_stage = None
     if current_index < len(IDEA_STATUSES) - 1:
@@ -685,7 +770,10 @@ def idea_detail(idea_id):
         current_index=current_index,
         priority_info=priority_info,
         next_stage=next_stage,
-        show_generic_advance=show_generic_advance
+        show_generic_advance=show_generic_advance,
+        is_bc_stage=is_bc_stage,
+        bc_data=bc_data,
+        bc_editable=bc_editable,
     )
 
 @app.route('/download_document/<int:idea_id>')
@@ -831,13 +919,14 @@ def update_benefits(idea_id):
     hours_saved = request.form.get('hours_saved')
     savings_measurement = request.form.get('savings_measurement')
     business_impact = request.form.get('business_impact')
+    confidence = request.form.get('confidence') or 'Medium'
     
     # Convert to appropriate types
     proj_savings = float(proj_savings) if proj_savings else None
     hours_saved = float(hours_saved) if hours_saved else None
     
     # Update database
-    update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact)
+    update_idea_benefits(idea_id, proj_savings, hours_saved, savings_measurement, business_impact, confidence)
     
     flash('Benefits updated successfully!', 'success')
     return redirect(url_for('idea_detail', idea_id=idea_id))
@@ -1144,79 +1233,476 @@ def api_jira_projects():
         return jsonify({'error': 'Failed to fetch projects. Please check your Jira credentials.'}), 500
 
 # ============================================
+# Business Case Routes
+# ============================================
+
+def can_edit_business_case(user, idea):
+    """Check if user can edit business case: SPOC assigned or Admin"""
+    return user['role'] == 'ADMIN' or (user['role'] == 'SPOC' and idea['spoc_id'] == user['id'])
+
+def can_view_or_download_bc(user, idea):
+    """Check if user can view or download business case PDF"""
+    return (
+        user['role'] == 'ADMIN' or
+        (user['role'] == 'SPOC' and idea['spoc_id'] == user['id']) or
+        (user['role'] == 'CGI_EXEC' and idea['status'] == 'Waiting for CGI approval') or
+        (user['role'] == 'LT_EXEC' and idea['status'] == 'Waiting for LT approval')
+    )
+
+@app.route('/ideas/<int:idea_id>/business-case')
+@login_required
+def business_case_page(idea_id):
+    """View or edit the business case for an idea in Business Case Template stage"""
+    user = get_current_user()
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea:
+        flash('Idea not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if idea['status'] != 'Business Case Template':
+        flash('Business case is only available for ideas in the Business Case Template stage.', 'warning')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    if not can_view_or_download_bc(user, idea):
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    
+    bc = get_business_case(idea_id)
+    editable = can_edit_business_case(user, idea)
+    
+    return render_template('business_case.html',
+        user=user,
+        idea=idea,
+        bc_data=bc or {},
+        editable=editable,
+        statuses=IDEA_STATUSES
+    )
+
+@app.route('/ideas/<int:idea_id>/business-case', methods=['POST'])
+@login_required
+def business_case_save(idea_id):
+    """Save business case data"""
+    user = get_current_user()
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea or idea['status'] != 'Business Case Template':
+        flash('Invalid request', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if not can_edit_business_case(user, idea):
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    
+    save_business_case(idea_id, {
+        'executive_summary': request.form.get('executive_summary', ''),
+        'benefit_type': request.form.get('benefit_type', ''),
+        'milestone_1': request.form.get('milestone_1', ''),
+        'milestone_2': request.form.get('milestone_2', ''),
+        'milestone_3': request.form.get('milestone_3', ''),
+        'milestone_4': request.form.get('milestone_4', ''),
+        'risk_assessment': request.form.get('risk_assessment', ''),
+        'mitigation_strategy': request.form.get('mitigation_strategy', ''),
+        'kpis': request.form.get('kpis', ''),
+        'stakeholders': request.form.get('stakeholders', ''),
+    })
+    
+    flash('Business case saved successfully!', 'success')
+    return redirect(url_for('business_case_page', idea_id=idea_id))
+
+@app.route('/ideas/<int:idea_id>/business-case-pdf')
+@login_required
+def business_case_pdf(idea_id):
+    """Generate a professional branded PDF of the business case"""
+    user = get_current_user()
+    idea = get_idea_by_id(idea_id)
+    
+    if not idea:
+        flash('Idea not found', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if idea['status'] != 'Business Case Template':
+        flash('Business case is only available for ideas in the Business Case Template stage.', 'warning')
+        return redirect(url_for('idea_detail', idea_id=idea_id))
+    
+    if not can_view_or_download_bc(user, idea):
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+    
+    bc = get_business_case(idea_id) or {}
+
+    # ---- Pure-Python PDF generation (reportlab) ----
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from io import BytesIO
+
+    # Parse financial values from idea fields
+    raw_cost = 0
+    if idea.get('est_cost_time'):
+        cost_str = idea['est_cost_time'].split(',')[0].strip() if ',' in idea['est_cost_time'] else idea['est_cost_time'].strip()
+        try:
+            raw_cost = float(cost_str.replace('$', '').replace(',', ''))
+        except (ValueError, TypeError):
+            raw_cost = 80000
+    cost = raw_cost or 80000
+    benefit = float(idea.get('proj_savings') or 0)
+    hours_yr = float(idea.get('hours_saved') or 0)
+
+    net_annual = benefit - cost
+    roi = ((benefit - cost) / cost * 100) if cost > 0 else 0
+    payback_months = (cost / (benefit / 12)) if benefit > 0 else 999
+    three_year_net = (benefit * 3) - cost
+
+    def safe_text(val, default='Not provided.'):
+        if not val:
+            return default
+        return str(val).strip()
+
+    BLUE = HexColor('#1e40af')
+    BLUE_LIGHT = HexColor('#dbeafe')
+    GREEN = HexColor('#15803d')
+    DARK = HexColor('#1e293b')
+    GREY = HexColor('#64748b')
+    BG = HexColor('#f8fafc')
+    BORDER = HexColor('#e2e8f0')
+
+    styles = getSampleStyleSheet()
+    pdf_buffer = BytesIO()
+    doc = SimpleDocTemplate(pdf_buffer, pagesize=A4)
+    elements = []
+
+    # --- Heading ---
+    elements.append(Spacer(1, 15 * mm))
+    title_p = ParagraphStyle('BC_Title', parent=styles['Heading1'],
+                             fontSize=22, textColor=BLUE, spaceAfter=4, fontName='Helvetica-Bold')
+    elements.append(Paragraph(safe_text(idea.get('title'), 'Business Case'), title_p))
+    sub_p = ParagraphStyle('BC_Sub', parent=styles['Normal'],
+                           fontSize=10, textColor=DARK, spaceAfter=2, fontName='Helvetica')
+    elements.append(Paragraph('Innovation Engine — Business Case Document', sub_p))
+    elements.append(Spacer(1, 5 * mm))
+
+    # --- Meta table ---
+    meta_data = [
+        ['Idea ID', f"#{idea.get('id', 'N/A')}", 'Status', safe_text(idea.get('status'))],
+        ['Category', safe_text(idea.get('category')), 'Submitted by', safe_text(idea.get('submitter_name'))],
+        ['Assigned SPOC', safe_text(idea.get('spoc_name')), 'Complexity', safe_text(idea.get('complexity'))],
+    ]
+    meta_table = Table(meta_data, colWidths=[50*mm, 65*mm, 45*mm, 50*mm])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), BG),
+        ('BOX', (0, 0), (-1, -1), 1, BORDER),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(meta_table)
+    elements.append(Spacer(1, 6 * mm))
+
+    def section_title(text):
+        s = ParagraphStyle('Sec', parent=styles['Heading2'],
+                           fontSize=14, textColor=BLUE, spaceBefore=8, spaceAfter=4,
+                           fontName='Helvetica-Bold', borderWidth=0, borderPadding=0)
+        elements.append(Paragraph(text, s))
+
+    def body_text(text):
+        elements.append(Paragraph(safe_text(text), ParagraphStyle('Body', parent=styles['Normal'],
+                           fontSize=10, leading=14, spaceAfter=4)))
+
+    # --- 1. Executive Summary ---
+    section_title('1. Executive Summary')
+    body_text(bc.get('executive_summary'))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 2. Problem Statement ---
+    section_title('2. Problem Statement')
+    body_text(idea.get('problem_statement'))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 3. Proposed Solution ---
+    section_title('3. Proposed Solution')
+    body_text(idea.get('proposed_solution'))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 4. Benefit Analysis ---
+    section_title('4. Benefit Analysis')
+    benefit_type_text = safe_text(bc.get('benefit_type'), 'Not selected')
+    elements.append(Paragraph(f"<b>Benefit Type:</b> {benefit_type_text}",
+                              ParagraphStyle('Benefit', fontSize=10, spaceAfter=4)))
+
+    fin_data = [
+        ['Estimated Cost', f"${cost:,.0f}", 'Annual Benefit', f"${benefit:,.0f}"],
+        ['Net Annual', f"${net_annual:,.0f}", 'ROI', f"{roi:,.1f}%"],
+        ['Payback Period', f"{payback_months:,.1f} months", '3-Year Net Benefit', f"${three_year_net:,.0f}"],
+    ]
+    fin_table = Table(fin_data, colWidths=[50*mm, 65*mm, 45*mm, 50*mm])
+    fin_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), BLUE_LIGHT),
+        ('BOX', (0, 0), (-1, -1), 1, BLUE),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(fin_table)
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 5. Milestones ---
+    section_title('5. Milestones')
+    milestones = []
+    for i in range(1, 5):
+        val = bc.get(f'milestone_{i}')
+        milestones.append(Paragraph(f"<b>M{i}:</b> {safe_text(val, 'Not defined')}",
+                                     ParagraphStyle('Mile', fontSize=10, spaceAfter=2)))
+    elements.extend(milestones)
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 6. Risks & Mitigation ---
+    section_title('6. Risks & Mitigation')
+    risk_data = [
+        ['Risks', 'Mitigation Strategy'],
+        [safe_text(bc.get('risk_assessment'), 'Not identified'),
+         safe_text(bc.get('mitigation_strategy'), 'Not defined')],
+    ]
+    risk_table = Table(risk_data, colWidths=[70*mm, 95*mm])
+    risk_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), BLUE),
+        ('TEXTCOLOR', (0, 0), (-1, 0), HexColor('#ffffff')),
+        ('BOX', (0, 0), (-1, -1), 1, BORDER),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(risk_table)
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 7. KPIs ---
+    section_title('7. KPIs')
+    body_text(bc.get('kpis'))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 8. Stakeholders ---
+    section_title('8. Stakeholders')
+    body_text(bc.get('stakeholders'))
+    elements.append(Spacer(1, 3 * mm))
+
+    # --- 9. Financial Summary (compact) ---
+    section_title('9. Financial Summary')
+    fin2_data = [
+        ['Estimated Cost', f"${cost:,.0f}", 'Hours Saved / Year', f"{hours_yr:,.0f}"],
+        ['Annual Benefit', f"${benefit:,.0f}", '3-Year Net', f"${three_year_net:,.0f}"],
+        ['ROI', f"{roi:,.1f}%", 'Payback', f"{payback_months:,.1f} months"],
+    ]
+    fin2_table = Table(fin2_data, colWidths=[50*mm, 65*mm, 45*mm, 50*mm])
+    fin2_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), BG),
+        ('BOX', (0, 0), (-1, -1), 1, BORDER),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('ALIGN', (3, 0), (3, -1), 'RIGHT'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(fin2_table)
+    elements.append(Spacer(1, 10 * mm))
+
+    # --- Footer ---
+    foot_p = ParagraphStyle('Foot', fontSize=8, textColor=GREY, alignment=1)
+    elements.append(Paragraph(
+        f"Generated by Innovation Engine &mdash; {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
+        foot_p
+    ))
+    elements.append(Paragraph(
+        "<i>This document is confidential and intended for authorized review only.</i>",
+        ParagraphStyle('Foot2', parent=foot_p)
+    ))
+
+    doc.build(elements)
+    pdf_bytes = pdf_buffer.getvalue()
+    return pdf_bytes, 200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': f'attachment; filename="Business_Case_{idea.get("title","").replace(" ", "_")}.pdf"',
+    }
+
+
+# ============================================
 # Business Logic
 # ============================================
 
-def calculate_priority_score(idea):
-    """Calculate priority score based on idea attributes with correct weighting."""
-    score = 0
-    breakdown = {}
-    weights = {
-        'savings': 0.35,
-        'complexity': 0.25,
-        'hours_saved': 0.25,
-        'users_impacted': 0.15
-    }
+# ---------------------------------------------------------------
+# Confidence / Weighted Scoring System
+# ---------------------------------------------------------------
 
-    # 1. Projected Savings (35% weight)
-    savings = idea.get('proj_savings') or 0
-    if savings > 100000:
-        savings_score = 3
-    elif savings > 50000:
-        savings_score = 2
-    else:
-        savings_score = 1
-    score += savings_score * weights['savings']
-    breakdown['Projected Savings'] = f"{savings_score}/3 points"
+# Confidence multipliers and their descriptions
+CONFIDENCE_MULTIPLIERS = {
+    'High':  {'mult': 1.2, 'label': 'High confidence'},
+    'Medium':{'mult': 1.0, 'label': 'Medium confidence'},
+    'Low':   {'mult': 0.8, 'label': 'Low confidence'},
+}
 
-    # 2. Complexity (25% weight)
-    complexity_map = {'Low': 3, 'Medium': 2, 'High': 1}
-    complexity_score = complexity_map.get(idea.get('complexity'), 1)
-    score += complexity_score * weights['complexity']
-    breakdown['Complexity'] = f"{complexity_score}/3 points"
+# Scoring bands for each factor (1-3 scale)
+SAVINGS_BANDS   = [(100000, 3), (50000, 2)]
+HOURS_BANDS     = [(1000, 3), (500, 2)]
+USERS_BANDS     = [(50, 3), (10, 2)]
 
-    # 3. Hours Saved per Year (25% weight)
-    hours_saved_yearly = idea.get('hours_saved') or 0
-    if hours_saved_yearly > 1000:
-        hours_score = 3
-    elif hours_saved_yearly > 500:
-        hours_score = 2
-    else:
-        hours_score = 1
-    score += hours_score * weights['hours_saved']
-    breakdown['Hours Saved (Yearly)'] = f"{hours_score}/3 points"
+# Weights per factor (must sum to 1.0)
+WEIGHTS = {
+    'Projected Savings':  0.35,
+    'Complexity':         0.25,
+    'Hours Saved (Yearly)': 0.25,
+    'Users Impacted':     0.15,
+}
 
-    # 4. Users Impacted (15% weight)
-    users_impacted_str = idea.get('users_impacted', '0')
-    users_num = 0
+# Raw score ceiling (3 * 1.0)
+MAX_RAW_SCORE = sum(3 * w for w in WEIGHTS.values())  # 3.0
+
+
+def _score_from_bands(value, bands, fallback=1):
+    """Return a 1-3 score based on threshold bands."""
+    for threshold, score in bands:
+        if value > threshold:
+            return score
+    return fallback
+
+
+def _extract_number(text):
+    """Pull an integer out of a text string like '100 users'."""
+    if not text:
+        return 0
     try:
-        if users_impacted_str:
-            users_num = int(''.join(filter(str.isdigit, users_impacted_str)))
+        return int(''.join(c for c in str(text) if c.isdigit()))
     except (ValueError, TypeError):
-        users_num = 0
-    
-    if users_num > 50:
-        users_score = 3
-    elif users_num > 10:
-        users_score = 2
-    else:
-        users_score = 1
-    score += users_score * weights['users_impacted']
-    breakdown['Users Impacted'] = f"{users_score}/3 points"
+        return 0
 
-    # Determine priority based on weighted score
-    # Max possible score is 3. A high score is > 2.0, med is > 1.0
-    if score > 2.0:
+
+def calculate_priority_score(idea):
+    """Calculate priority score using weighted scoring + confidence multipliers.
+
+    Returns a dict with keys:
+        priority, score, raw_score, confidence, multiplier, breakdown,
+        missing_fields, summary_sentence
+    """
+    proj_savings = idea.get('proj_savings') or 0
+    complexity   = idea.get('complexity') or ''
+    hours_saved  = idea.get('hours_saved') or 0
+    users_str    = idea.get('users_impacted') or ''
+    users_num    = _extract_number(users_str)
+    confidence   = idea.get('confidence') or 'Medium'
+
+    # Determine missing fields
+    raw_fields = {
+        'Projected Savings':  proj_savings > 0,
+        'Complexity':         complexity in ('Low', 'Medium', 'High'),
+        'Hours Saved (Yearly)': hours_saved > 0,
+        'Users Impacted':     users_num > 0,
+    }
+    missing_fields = [f for f, ok in raw_fields.items() if not ok]
+
+    # --- Unscored when ALL fields are empty ---
+    if all(not v for v in raw_fields.values()):
+        return {
+            'priority': 'Unscored',
+            'score': 0,
+            'raw_score': 0,
+            'confidence': confidence,
+            'multiplier': CONFIDENCE_MULTIPLIERS[confidence]['mult'],
+            'breakdown': {f: 'N/A' for f in WEIGHTS},
+            'missing_fields': missing_fields,
+            'summary_sentence': (
+                'This idea is in ScoreIT stage but has no benefit data yet. '
+                'Please update the savings, complexity, hours saved, and users impacted fields to calculate priority.'
+            ),
+        }
+
+    # --- Weighted scoring (1-3 per factor) ---
+    raw_score = 0.0
+    breakdown = {}
+
+    # 1. Savings (35 %)
+    savings_score = _score_from_bands(proj_savings, SAVINGS_BANDS)
+    raw_score += savings_score * WEIGHTS['Projected Savings']
+    breakdown['Projected Savings'] = f"{savings_score}/3 points (${proj_savings:,.0f})"
+
+    # 2. Complexity (25 %) — lower complexity = higher score
+    complexity_map = {'Low': 3, 'Medium': 2, 'High': 1}
+    complexity_score = complexity_map.get(complexity, 1)
+    raw_score += complexity_score * WEIGHTS['Complexity']
+    breakdown['Complexity'] = f"{complexity_score}/3 points ({complexity or 'N/A'})"
+
+    # 3. Hours Saved per Year (25 %)
+    hours_score = _score_from_bands(hours_saved, HOURS_BANDS)
+    raw_score += hours_score * WEIGHTS['Hours Saved (Yearly)']
+    breakdown['Hours Saved (Yearly)'] = f"{hours_score}/3 points ({hours_saved:,.0f} hrs/year)"
+
+    # 4. Users Impacted (15 %)
+    users_score = _score_from_bands(users_num, USERS_BANDS)
+    raw_score += users_score * WEIGHTS['Users Impacted']
+    breakdown['Users Impacted'] = f"{users_score}/3 points ({users_num} users)"
+
+    # Apply confidence multiplier
+    multiplier = CONFIDENCE_MULTIPLIERS[confidence]['mult']
+    score = round(raw_score * multiplier, 2)
+
+    # Priority bands (applied to *adjusted* score)
+    high_cutoff = MAX_RAW_SCORE * 0.75   # 2.25
+    med_cutoff  = MAX_RAW_SCORE * 0.50   # 1.50
+    if score > high_cutoff:
         priority = 'High'
-    elif score > 1.0:
+    elif score > med_cutoff:
         priority = 'Medium'
     else:
         priority = 'Low'
-        
+
+    # --- Summary sentence ---
+    strong = [f for f, sc in [
+        ('Projected Savings', proj_savings),
+        ('Hours Saved', hours_saved),
+        ('Users Impacted', users_num),
+    ] if _score_from_bands(sc, SAVINGS_BANDS if f == 'Projected Savings' else HOURS_BANDS if f == 'Hours Saved' else USERS_BANDS) >= 3]
+    weak = [f for f, sc in [
+        ('Projected Savings', proj_savings),
+        ('Hours Saved', hours_saved),
+        ('Users Impacted', users_num),
+        ('Complexity', complexity),
+    ] if (f == 'Complexity' and sc == 'High') or
+        (f != 'Complexity' and _score_from_bands(sc, SAVINGS_BANDS if f == 'Projected Savings' else HOURS_BANDS if f == 'Hours Saved' else USERS_BANDS) <= 1)]
+    if strong:
+        strong_part = ' and '.join(strong) + ' are strong factors'
+    else:
+        strong_part = 'No standout factors yet'
+    if weak:
+        weak_part = '; ' + ' and '.join(weak) + ' are weak factors'
+    else:
+        weak_part = ''
+
+    summary_sentence = (
+        f"This idea is assessed as **{priority}** priority (score {score}/{MAX_RAW_SCORE}) "
+        f"based on {strong_part}{weak_part}. "
+        f"Confidence: {confidence.lower()} ({CONFIDENCE_MULTIPLIERS[confidence]['label']})."
+    )
+
     return {
         'priority': priority,
-        'score': round(score, 2),
-        'breakdown': breakdown
+        'score': score,
+        'raw_score': round(raw_score, 2),
+        'confidence': confidence,
+        'multiplier': multiplier,
+        'breakdown': breakdown,
+        'missing_fields': missing_fields,
+        'summary_sentence': summary_sentence,
+        'max_score': MAX_RAW_SCORE,
     }
 
 # ============================================
@@ -1227,7 +1713,8 @@ def calculate_priority_score(idea):
 def currency_filter(value):
     if value is None:
         return '-'
-    return f"${value:,.0f}"
+    import math
+    return f"${math.floor(value + 0.5):,.0f}"
 
 @app.template_filter('date')
 def date_filter(value):
