@@ -13,3 +13,4 @@ Notes:
 - No existing executable HTTP payment endpoint was found in the repo. `payment_api.py` currently provides an in-memory service component only.
 - The mock harness wraps the repo's `PaymentService` behavior and adds validation, auth checks, and status retrieval routes so automation can be authored without unrelated app changes.
 - Artifacts are intentionally isolated under `tests/payment_api_test_artifacts/` to avoid impacting the main Flask application.
+- The Excel workbook covers payment initiation, status retrieval, validation, idempotency, invalid requests, error handling, and authentication/authorization scenarios with Jira story traceability.
