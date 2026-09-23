@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment API Test Execution Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f9fc; color: #1f2937; }
+    h1 { color: #0f172a; }
+    .summary { display: flex; gap: 16px; margin-bottom: 24px; }
+    .card { background: white; border: 1px solid #dbe3f0; border-radius: 10px; padding: 16px 20px; min-width: 140px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    .label { font-size: 12px; color: #64748b; text-transform: uppercase; }
+    .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { border: 1px solid #dbe3f0; padding: 12px; text-align: left; vertical-align: top; }
+    th { background: #eff6ff; color: #1d4ed8; }
+    .pass { color: #166534; font-weight: 700; }
+    .fail { color: #b91c1c; font-weight: 700; }
+    code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Payment API Test Execution Report</h1>
+  <div class="summary">
+    <div class="card"><div class="label">Total tests</div><div class="value">10</div></div>
+    <div class="card"><div class="label">Passed</div><div class="value">9</div></div>
+    <div class="card"><div class="label">Failed</div><div class="value">1</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Test name</th>
+        <th>Actual result</th>
+        <th>Pass/Fail status</th>
+        <th>Jira story reference</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>test_payment_initiation_returns_accepted_and_ids</code></td>
+        <td>POST /api/payments returned 202 Accepted with paymentId, traceId, idempotencyKey and replayed=false.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582, RBTES-1611</td>
+      </tr>
+      <tr>
+        <td><code>test_payment_status_retrieval_by_system_payment_id</code></td>
+        <td>Status retrieval by paymentId returned 200 and normalized payment status payload.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582, RBTES-1611</td>
+      </tr>
+      <tr>
+        <td><code>test_payment_status_retrieval_by_customer_request_id</code></td>
+        <td>Status retrieval by customerRequestId returned 200 and accepted payment status payload.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582, RBTES-1611</td>
+      </tr>
+      <tr>
+        <td><code>test_repeated_request_with_same_idempotency_key_returns_original_response</code></td>
+        <td>Equivalent repeated request returned original paymentId and replayed=true without duplicate creation.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582</td>
+      </tr>
+      <tr>
+        <td><code>test_same_idempotency_key_with_different_payload_returns_conflict</code></td>
+        <td>Different payload with reused Idempotency-Key returned 409 conflict with IDEMPOTENCY_KEY_CONFLICT.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582</td>
+      </tr>
+      <tr>
+        <td><code>test_missing_required_field_returns_validation_error</code></td>
+        <td>Missing customerRequestId returned 400 VALIDATION_ERROR with field details.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1582, RBTES-1584</td>
+      </tr>
+      <tr>
+        <td><code>test_invalid_json_returns_bad_request</code></td>
+        <td>Test failed. Response status was 400, but response body code was <code>VALIDATION_ERROR</code> instead of expected <code>INVALID_JSON</code>.</td>
+        <td class="fail">FAIL</td>
+        <td>RBTES-1582, RBTES-1584</td>
+      </tr>
+      <tr>
+        <td><code>test_missing_authentication_returns_unauthorized</code></td>
+        <td>Request without Authorization header returned 401 UNAUTHORIZED.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1567</td>
+      </tr>
+      <tr>
+        <td><code>test_invalid_token_returns_forbidden</code></td>
+        <td>Request with invalid bearer token returned 403 FORBIDDEN.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1567</td>
+      </tr>
+      <tr>
+        <td><code>test_unknown_payment_identifier_returns_not_found</code></td>
+        <td>Unknown paymentId returned 404 PAYMENT_NOT_FOUND.</td>
+        <td class="pass">PASS</td>
+        <td>RBTES-1611</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
