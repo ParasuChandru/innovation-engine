@@ -1,0 +1,190 @@
+openapi: 3.0.3
+info:
+  title: Payment API Contract Stub
+  version: 0.1.0
+  description: |
+    Testing-oriented contract stub for Jira Epic RBTES-1567 and stories RBTES-1582, RBTES-1584, RBTES-1611.
+servers:
+  - url: http://127.0.0.1:5010
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  schemas:
+    PaymentInitiationRequest:
+      type: object
+      required:
+        - customerRequestId
+        - debtor
+        - creditor
+        - instructedAmount
+        - requestedExecutionDate
+      properties:
+        customerRequestId:
+          type: string
+        debtor:
+          type: object
+        creditor:
+          type: object
+        instructedAmount:
+          type: object
+          required: [currency, amount]
+          properties:
+            currency:
+              type: string
+              enum: [EUR]
+            amount:
+              type: string
+        requestedExecutionDate:
+          type: string
+          format: date
+    PaymentInitiationResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+        traceId:
+          type: string
+        idempotencyKey:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED]
+        replayed:
+          type: boolean
+        receivedAt:
+          type: string
+          format: date-time
+    PaymentStatusResponse:
+      type: object
+      properties:
+        paymentId:
+          type: string
+        customerRequestId:
+          type: string
+        traceId:
+          type: string
+        transactionStatus:
+          type: string
+          example: ACCP
+        paymentStatus:
+          type: string
+        statusReason:
+          type: string
+        replayed:
+          type: boolean
+        lastUpdatedAt:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        field:
+          type: string
+        status:
+          oneOf:
+            - type: integer
+            - type: string
+        timestamp:
+          type: string
+          format: date-time
+paths:
+  /api/payments:
+    post:
+      summary: Initiate payment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInitiationRequest'
+      responses:
+        '202':
+          description: Payment accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInitiationResponse'
+        '200':
+          description: Idempotent replay of original request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInitiationResponse'
+        '400':
+          description: Validation or JSON error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing auth
+        '403':
+          description: Invalid auth
+        '409':
+          description: Idempotency key conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/payments/{paymentId}/status:
+    get:
+      summary: Retrieve payment status by system payment id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+        '404':
+          description: Payment not found
+  /api/payments/status:
+    get:
+      summary: Retrieve payment status by customer provided id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: customerRequestId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Payment status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+        '400':
+          description: Missing query parameter
+        '404':
+          description: Payment not found
