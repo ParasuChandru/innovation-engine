@@ -9,7 +9,6 @@ sys.path.insert(0, PROJECT_ROOT)
 import pytest
 
 from payment_api import (
-    IdempotencyConflictError,
     IdempotencyError,
     PaymentService,
 )
@@ -42,11 +41,15 @@ def test_repeated_equivalent_request_returns_original_response(service):
     assert second_response["paymentId"] == first_response["paymentId"]
 
 
-def test_same_key_with_different_payload_raises_conflict(service):
+def test_same_key_with_different_payload_returns_conflict_response(service):
     service.initiate_payment(sample_payload(amount="125.50"), "IDEMP-12345678")
 
-    with pytest.raises(IdempotencyConflictError):
-        service.initiate_payment(sample_payload(amount="130.00"), "IDEMP-12345678")
+    conflict_response, replayed = service.initiate_payment(sample_payload(amount="130.00"), "IDEMP-12345678")
+
+    assert replayed is False
+    assert conflict_response["code"] == "IDEMPOTENCY_KEY_CONFLICT"
+    assert conflict_response["status"] == "CONFLICT"
+    assert conflict_response["idempotencyKey"] == "IDEMP-12345678"
 
 
 def test_missing_idempotency_key_is_rejected(service):
