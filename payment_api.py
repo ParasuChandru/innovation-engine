@@ -63,9 +63,7 @@ class PaymentService:
 
         if existing:
             if existing.payload_hash != payload_hash:
-                raise IdempotencyConflictError(
-                    "Idempotency-Key has already been used with a different payment initiation request"
-                )
+                return self._build_conflict_response(normalized_key, existing.trace_id), False
             return existing.to_response(), True
 
         record = PaymentRecord(
@@ -85,6 +83,16 @@ class PaymentService:
 
         canonical_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _build_conflict_response(idempotency_key: str, trace_id: str) -> Dict[str, Any]:
+        return {
+            "code": "IDEMPOTENCY_KEY_CONFLICT",
+            "message": "Idempotency-Key has already been used with a different payment initiation request",
+            "idempotencyKey": idempotency_key,
+            "traceId": trace_id,
+            "status": "CONFLICT",
+        }
 
 
 payment_service = PaymentService()
